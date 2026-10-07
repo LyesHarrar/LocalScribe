@@ -1,14 +1,15 @@
 [theme]
 base = "dark"
 primaryColor = "#6366f1"
-backgroundColor = "#0f172a"
-secondaryBackgroundColor = "#1e293b"
+backgroundColor = "#090a0f"
+secondaryBackgroundColor = "#181926"
 textColor = "#f8fafc"
 font = "sans serif"
 
 [server]
 headless = true
 port = 8501
+maxUploadSize = 4096 # Limite d'upload augmentée à 4 Go pour accepter les vidéos longues (MKV, MP4, etc.)
 
 [browser]
 gatherUsageStats = false
