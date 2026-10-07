@@ -1,0 +1,14 @@
+# Core — Moteur de transcription
+faster-whisper>=1.1.0
+imageio-ffmpeg>=0.5.1
+
+# UI — Interface graphique
+streamlit>=1.40.0
+streamlit-shadcn-ui>=0.1.28
+
+# Desktop — Fenêtre native
+pywebview>=5.0
+requests>=2.31.0
+
+# Utilitaires
+pyperclip>=1.9.0
