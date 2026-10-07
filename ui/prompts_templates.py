@@ -75,7 +75,7 @@ TEMPLATES = [
 ]
 
 def render_llm_templates(transcription_text: str = ""):
-    st.markdown("### 🤖 Exploitation avec un LLM (ChatGPT, Claude, Ollama...)")
+    st.markdown("### :material/smart_toy: Exploitation avec un LLM (ChatGPT, Claude, Ollama...)")
     st.caption("Sélectionnez un modèle de prompt pour copier en 1 clic l'instruction pré-remplie avec votre texte.")
     
     for tpl in TEMPLATES:
@@ -97,11 +97,20 @@ def render_llm_templates(transcription_text: str = ""):
             
             with st.expander("👁️ Consulter et copier le prompt"):
                 st.code(full_prompt, language="text")
-                if st.button(f"📋 Copier le prompt dans le presse-papier", key=f"copy_{tpl['id']}"):
-                    try:
-                        pyperclip.copy(full_prompt)
-                        st.success("Copié avec succès !")
-                    except Exception:
-                        st.info("Sélectionnez et copiez le texte ci-dessus.")
+                
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
+                with col_btn1:
+                    if st.button(f":material/content_paste: Copier le prompt", key=f"copy_{tpl['id']}", use_container_width=True):
+                        try:
+                            pyperclip.copy(full_prompt)
+                            st.toast("Copié avec succès !", icon="✅")
+                        except Exception:
+                            st.toast("Erreur de copie.", icon="❌")
+                
+                with col_btn2:
+                    st.link_button("🌐 Ouvrir ChatGPT", "https://chatgpt.com", use_container_width=True)
+                
+                with col_btn3:
+                    st.link_button("🌐 Ouvrir Claude", "https://claude.ai/new", use_container_width=True)
                         
-            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.1);'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)

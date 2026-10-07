@@ -20,6 +20,9 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 
+import importlib
+import ui.styles
+importlib.reload(ui.styles)
 from ui.styles import inject_custom_css
 from ui.prompts_templates import render_llm_templates
 from core.hardware_profiler import detect_hardware
@@ -60,16 +63,19 @@ def select_folder_dialog() -> str:
 def render_metric_card(label: str, value: str, subtext: str = ""):
     """Rendu d'une carte métrique au style Framer / Linear."""
     st.markdown(f"""
-    <div style="background: #090e1c; border: 1px solid rgba(46, 116, 253, 0.18); border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
-        <div style="color: #94a3b8; font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem;">{label}</div>
-        <div style="color: #ffffff; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em;">{value}</div>
-        <div style="color: #64748b; font-size: 0.76rem; margin-top: 0.2rem;">{subtext}</div>
+    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
+        <div style="color: #a1a1aa; font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem;">{label}</div>
+        <div style="color: #f8fafc; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em;">{value}</div>
+        <div style="color: #71717a; font-size: 0.76rem; margin-top: 0.2rem;">{subtext}</div>
     </div>
     """, unsafe_allow_html=True)
 
 def render_badge(text: str, color: str = "#60a5fa", bg: str = "rgba(46, 116, 253, 0.12)"):
-    """Badge pill moderne."""
-    return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{text}</span>"""
+    """Badge pill moderne avec support des icones material."""
+    import re
+    # Convert :material/icon: to HTML span
+    parsed_text = re.sub(r':material/([^:]+):', r'<span class="material-symbols-rounded" style="font-family: \'Material Symbols Rounded\' !important; font-size: 1.1em; margin-right: 4px; vertical-align: -0.125em;">\1</span>', text)
+    return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{parsed_text}</span>"""
 
 def render_sidebar():
     """Barre latérale avec configuration et matériel."""
@@ -77,10 +83,10 @@ def render_sidebar():
         if LOGO_PATH.exists():
             st.image(str(LOGO_PATH), use_container_width=True)
         else:
-            st.title("🎙️ LocalScribe")
+            st.title("LocalScribe")
             
         st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
-        st.markdown("### ⚙️ Accélération Matérielle")
+        st.markdown("### :material/settings: Accélération Matérielle")
         
         if "hw_profile" not in st.session_state:
             st.session_state.hw_profile = detect_hardware()
@@ -88,8 +94,8 @@ def render_sidebar():
         profile = st.session_state.hw_profile
         
         # Badges matériels
-        dev_badge = render_badge(f"⚡ {profile.device.upper()}", color="#38bdf8", bg="rgba(56, 189, 248, 0.12)") if profile.device == "cuda" else render_badge(f"💻 {profile.device.upper()}", color="#94a3b8", bg="rgba(148, 163, 184, 0.12)")
-        comp_badge = render_badge(f"🎯 {profile.compute_type}", color="#818cf8", bg="rgba(129, 140, 248, 0.12)")
+        dev_badge = render_badge(f":material/bolt: {profile.device.upper()}", color="#38bdf8", bg="rgba(56, 189, 248, 0.12)") if profile.device == "cuda" else render_badge(f":material/computer: {profile.device.upper()}", color="#94a3b8", bg="rgba(148, 163, 184, 0.12)")
+        comp_badge = render_badge(f":material/center_focus_strong: {profile.compute_type}", color="#818cf8", bg="rgba(129, 140, 248, 0.12)")
         
         st.markdown(f"<div>{dev_badge}{comp_badge}</div>", unsafe_allow_html=True)
         
@@ -99,9 +105,9 @@ def render_sidebar():
         for warning in profile.warnings:
             st.warning(warning)
             
-        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         
-        st.markdown("### 🧠 Modèle Whisper")
+        st.markdown("### :material/memory: Modèle Whisper")
         model_options = ["tiny", "base", "small", "medium", "large-v3"]
         default_index = model_options.index(profile.recommended_model) if profile.recommended_model in model_options else 1
         
@@ -114,11 +120,11 @@ def render_sidebar():
         st.session_state.selected_model = selected_model
         st.caption(f"Recommandation système : `{profile.recommended_model}`")
         
-        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
-        <div style="background: rgba(46, 116, 253, 0.05); border: 1px solid rgba(46, 116, 253, 0.15); border-radius: 10px; padding: 0.85rem;">
+        <div style="background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 0.85rem;">
             <div style="font-weight: 600; color: #38bdf8; font-size: 0.82rem;">🛡️ Confidentialité Absolue</div>
-            <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.2rem;">Aucun appel réseau. Zéro donnée partagée. Inférence 100% exécutée sur vos puces locales.</div>
+            <div style="color: #a1a1aa; font-size: 0.75rem; margin-top: 0.2rem;">Aucun appel réseau. Zéro donnée partagée. Inférence 100% exécutée sur vos puces locales.</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -134,7 +140,7 @@ def save_uploaded_file(uploaded_file) -> Path:
 def main():
     st.set_page_config(
         page_title="LocalScribe — Transcription Locale Haute Fidélité",
-        page_icon="🎙️",
+        page_icon="",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -142,24 +148,22 @@ def main():
     render_sidebar()
     
     # En-tête Principal de l'Application
-    col_logo, col_header = st.columns([1, 6])
-    with col_logo:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=105)
-    with col_header:
-        st.markdown("<h1>LocalScribe</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #94a3b8; font-size: 1rem; margin-top: -0.2rem;'>Transcription audio & vidéo 100 % locale, privée et propulsée par faster-whisper.</p>", unsafe_allow_html=True)
-        
-        badges_html = (
-            render_badge("🔒 Zéro Réseau", color="#38bdf8", bg="rgba(56, 189, 248, 0.1)") +
-            render_badge("📁 Batch In-Place", color="#60a5fa", bg="rgba(46, 116, 253, 0.1)") +
-            render_badge("⚡ Accélération RTX CUDA", color="#34d399", bg="rgba(52, 211, 153, 0.1)")
-        )
-        st.markdown(f"<div style='margin-top: 0.3rem;'>{badges_html}</div>", unsafe_allow_html=True)
-        
+    st.markdown("""
+    <div style="margin-bottom: 0.8rem;">
+        <h1 style="font-size: 2.2rem; font-weight: 800; letter-spacing: -0.035em; margin: 0; background: linear-gradient(135deg, #ffffff 40%, #93c5fd 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">LocalScribe</h1>
+        <p style="color: #94a3b8; font-size: 0.95rem; margin-top: 0.25rem; margin-bottom: 0;">Transcription audio & vidéo 100 % locale, privée et propulsée par faster-whisper.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    badges_html = (
+        render_badge(":material/lock: Zéro Réseau", color="#38bdf8", bg="rgba(56, 189, 248, 0.1)") +
+        render_badge(":material/folder: Batch In-Place", color="#60a5fa", bg="rgba(46, 116, 253, 0.1)") +
+        render_badge(":material/bolt: Accélération RTX CUDA", color="#34d399", bg="rgba(52, 211, 153, 0.1)")
+    )
+    st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
+    
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
-    # Initialisation de l'état
     if "is_processing" not in st.session_state:
         st.session_state.is_processing = False
     if "transcription_done" not in st.session_state:
@@ -171,14 +175,20 @@ def main():
     if "batch_stats" not in st.session_state:
         st.session_state.batch_stats = {}
 
-    # Sélecteur de Mode Segmenté
-    mode_selection = st.radio(
-        "Mode de traitement :",
-        options=["📁 Dossier complet (Tous les sous-dossiers & fichiers .txt in-place)", "📄 Fichier unique (Glisser-déposer)"],
-        horizontal=True,
-        disabled=st.session_state.is_processing
+    import streamlit_shadcn_ui as ui
+
+    # Sélecteur de Mode Segmenté moderne
+    mode_selection = st.segmented_control(
+        "Mode de transcription",
+        options=[":material/folder: Mode Dossier (Batch)", ":material/description: Mode Fichier Unique"],
+        default=":material/folder: Mode Dossier (Batch)",
+        selection_mode="single",
+        label_visibility="collapsed",
+        key="mode_segmented_control"
     )
-    is_batch_mode = "Dossier complet" in mode_selection
+    if not mode_selection:
+        mode_selection = ":material/folder: Mode Dossier (Batch)"
+    is_batch_mode = "Dossier" in mode_selection
 
     # =========================================================================
     # VUE 1 : Configuration et Lancement
@@ -187,9 +197,9 @@ def main():
         
         # --- MODE 1 : DOSSIER COMPLET (BATCH RÉCURSIF IN-PLACE) ---
         if is_batch_mode:
-            st.markdown("### 📁 Sélection du dossier racine")
+            st.markdown("### :material/folder: Sélection du dossier racine")
             st.markdown("""
-            <div style="background: rgba(46, 116, 253, 0.04); border: 1px solid rgba(46, 116, 253, 0.15); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+            <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
                 <div style="color: #e2e8f0; font-size: 0.92rem; line-height: 1.5;">
                     LocalScribe va analyser récursivement ce dossier et <strong>l'ensemble de ses sous-dossiers</strong>. 
                     Chaque vidéo sera retranscrite sous forme d'un fichier <strong>.txt</strong> portant le même nom, 
@@ -203,14 +213,13 @@ def main():
                 target_input = st.text_input(
                     "Chemin d'accès au dossier :",
                     value=st.session_state.target_folder,
-                    placeholder=r"Exemple : C:\Users\Nom\Vidéos\Formations",
-                    help="Collez le chemin d'accès ou cliquez sur Parcourir."
+                    placeholder=r"Exemple : C:\Users\Nom\Vidéos\Formations"
                 )
                 if target_input:
                     st.session_state.target_folder = target_input
             with col_btn:
-                st.markdown("<div style='margin-top: 1.85rem;'></div>", unsafe_allow_html=True)
-                if st.button("📂 Parcourir...", use_container_width=True):
+                st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
+                if st.button(":material/folder_open: Parcourir", use_container_width=True):
                     picked = select_folder_dialog()
                     if picked:
                         st.session_state.target_folder = picked
@@ -227,27 +236,28 @@ def main():
                 already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
                 remaining = total_found - already_done
                 
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
-                    render_metric_card("Vidéos Détectées", str(total_found), "Dans l'arborescence complète")
+                    ui.metric_card(label="Vidéos Détectées", value=str(total_found), description="Dans l'arborescence complète")
                 with col_m2:
-                    render_metric_card("Déjà Transcrites (.txt)", str(already_done), "Ignorées (Smart Resume)")
+                    ui.metric_card(label="Déjà Transcrites", value=str(already_done), description="Ignorées (Smart Resume)")
                 with col_m3:
-                    render_metric_card("Restantes à Traiter", str(remaining), "À convertir par Whisper")
+                    ui.metric_card(label="Restantes à Traiter", value=str(remaining), description="À convertir par Whisper")
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
-                st.markdown("##### ⚙️ Options de sortie :")
+                st.markdown("##### :material/settings: Options de sortie :")
                 col_opt1, col_opt2, col_opt3 = st.columns(3)
                 with col_opt1:
-                    st.checkbox("📄 Texte brut (.txt)", value=True, disabled=True, help="Toujours généré in-place à côté de chaque vidéo.")
+                    st.checkbox(":material/description: Texte brut (.txt)", value=True, disabled=True)
                 with col_opt2:
-                    export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=False, help="Générer également un fichier .srt à côté de chaque vidéo.")
+                    export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=False)
                 with col_opt3:
-                    export_md = st.checkbox("📝 Markdown (.md)", value=False, help="Générer également un fichier .md avec métadonnées front-matter.")
+                    export_md = st.checkbox(":material/markdown: Markdown (.md)", value=False)
 
-                st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 if total_found > 0:
-                    if st.button("🚀 Lancer la transcription du dossier", type="primary", use_container_width=True):
+                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -279,27 +289,26 @@ def main():
             elif st.session_state.target_folder:
                 st.error("Le dossier spécifié n'existe pas ou n'est pas accessible.")
 
-        # --- MODE 2 : FICHIER UNIQUE (GLISSER-DÉPOSER) ---
+        # --- MODE 2 : FICHIER UNIQUE ---
         else:
-            st.markdown("### 📄 Importer un enregistrement individuel")
+            st.markdown("### :material/description: Importer un enregistrement individuel")
             uploaded_file = st.file_uploader(
                 "Glissez-déposez votre fichier ici",
-                type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov"],
-                help="Formats supportés : MP3, WAV, M4A, OGG, FLAC, MP4, MKV, MOV"
+                type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov"]
             )
             
             if uploaded_file:
                 col_info1, col_info2, col_info3 = st.columns(3)
+                file_size_mb = uploaded_file.size / (1024 * 1024)
                 with col_info1:
-                    render_metric_card("Fichier", uploaded_file.name, "Fichier source")
+                    ui.metric_card(label="Fichier", value=uploaded_file.name[:15]+"...", description="Fichier source")
                 with col_info2:
-                    file_size_mb = uploaded_file.size / (1024 * 1024)
-                    render_metric_card("Taille", f"{file_size_mb:.2f} MB", "Poids du fichier")
+                    ui.metric_card(label="Taille", value=f"{file_size_mb:.2f} MB", description="Poids du fichier")
                 with col_info3:
-                    render_metric_card("Modèle Actif", st.session_state.selected_model, "faster-whisper")
+                    ui.metric_card(label="Modèle Actif", value=st.session_state.selected_model, description="faster-whisper")
                     
-                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-                if st.button("🚀 Démarrer la transcription", type="primary", use_container_width=True):
+                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                if st.button(":material/rocket_launch: Démarrer la transcription", key="btn_launch_single", type="primary", use_container_width=True):
                     file_path = save_uploaded_file(uploaded_file)
                     output_dir = PROJECT_ROOT / "output"
                     
@@ -410,9 +419,17 @@ def main():
         # Aperçu en direct du texte retranscrit
         if st.session_state.latest_text:
             st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-            st.markdown("##### 🎙️ Flux retranscrit en direct :")
-            preview = st.session_state.latest_text[-350:]
-            st.info(f"... {preview}")
+            st.markdown("##### Flux retranscrit en direct :")
+            preview = st.session_state.latest_text[-400:]
+            st.markdown(f"""
+            <div style="background: #09090b; border: 1px solid #27272a; border-radius: 8px; padding: 1rem; font-family: 'Consolas', 'Courier New', monospace; color: #10b981; font-size: 0.85rem; line-height: 1.5; min-height: 120px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);">
+                <span style="color: #64748b;">$ whisper --model {st.session_state.get('selected_model', 'medium')}</span><br><br>
+                ... {preview}<span style="animation: blink 1s step-end infinite;">_</span>
+            </div>
+            <style>
+                @keyframes blink {{ 50% {{ opacity: 0; }} }}
+            </style>
+            """, unsafe_allow_html=True)
             
         time.sleep(0.3)
         st.rerun()
@@ -425,31 +442,31 @@ def main():
         
         if is_batch:
             stats = st.session_state.get("batch_stats", {})
-            st.success("🎉 Transcription du dossier terminée avec succès !")
+            st.success(":material/celebration: Transcription du dossier terminée avec succès !")
             
             col_b1, col_b2, col_b3 = st.columns(3)
             with col_b1:
-                render_metric_card("Total Analysé", str(stats.get("total", 0)), "Vidéos dans l'arborescence")
+                ui.metric_card(label="Total Analysé", value=str(stats.get("total", 0)), description="Vidéos dans l'arborescence")
             with col_b2:
-                render_metric_card("Nouvellement Transcrites", str(stats.get("processed", 0)), "Fichiers .txt générés in-place")
+                ui.metric_card(label="Nouvellement Transcrites", value=str(stats.get("processed", 0)), description="Fichiers .txt générés in-place")
             with col_b3:
-                render_metric_card("Déjà Existantes", str(stats.get("skipped", 0)), "Ignorées (Smart Resume)")
+                ui.metric_card(label="Déjà Existantes", value=str(stats.get("skipped", 0)), description="Ignorées (Smart Resume)")
                 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
             folder_path = Path(st.session_state.target_folder)
             st.markdown(f"Tous les fichiers **`.txt`** ont été enregistrés directement à côté de chaque vidéo dans :  \n`{folder_path.resolve()}`")
             
-            if st.button("📂 Ouvrir le dossier dans l'explorateur Windows", type="primary"):
+            if st.button(":material/folder_open: Ouvrir le dossier dans l'explorateur Windows", type="primary"):
                 open_folder_in_explorer(folder_path)
                 
-            st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
-            if st.button("🔄 Traiter un autre dossier", use_container_width=True):
+            st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            if st.button(":material/sync: Traiter un autre dossier", use_container_width=True):
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""
                 st.rerun()
         else:
-            st.success("🎉 Transcription terminée avec succès !")
+            st.success(":material/celebration: Transcription terminée avec succès !")
             file_path = st.session_state.current_file
             out_dir = st.session_state.output_dir
             base_name = file_path.stem
@@ -463,15 +480,15 @@ def main():
             
             # Onglets élégants Linear / Shadcn
             tab_txt, tab_md, tab_srt, tab_llm = st.tabs([
-                "📄 Texte Brut (.txt)", 
-                "📝 Markdown (.md)", 
+                ":material/description: Texte Brut (.txt)", 
+                ":material/markdown: Markdown (.md)", 
                 "⏱️ Sous-titres (.srt)", 
                 "🤖 Prompts LLM"
             ])
             
             with tab_txt:
                 st.download_button(
-                    label="📥 Télécharger le fichier texte (.txt)",
+                    label=":material/download: Télécharger le fichier texte (.txt)",
                     data=txt_text,
                     file_name=f"{base_name}.txt",
                     mime="text/plain",
@@ -481,7 +498,7 @@ def main():
                 
             with tab_md:
                 st.download_button(
-                    label="📥 Télécharger le Markdown (.md)",
+                    label=":material/download: Télécharger le Markdown (.md)",
                     data=md_text,
                     file_name=f"{base_name}.md",
                     mime="text/markdown",
@@ -491,7 +508,7 @@ def main():
                 
             with tab_srt:
                 st.download_button(
-                    label="📥 Télécharger les Sous-titres (.srt)",
+                    label=":material/download: Télécharger les Sous-titres (.srt)",
                     data=srt_text,
                     file_name=f"{base_name}.srt",
                     mime="text/plain",
@@ -503,7 +520,7 @@ def main():
                 render_llm_templates(transcription_text=txt_text)
                 
             st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
-            if st.button("🔄 Nouvelle transcription", use_container_width=True):
+            if st.button(":material/sync: Nouvelle transcription", use_container_width=True):
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""

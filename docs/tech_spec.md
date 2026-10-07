@@ -97,39 +97,24 @@ Gère l'export en YAML Front-matter, SRT, INDEX global et le routage vers un dos
 
 ---
 
-## 4. Spécification — Couche UI (`ui/app.py`)
+## 4. Spécification — Couche UI (`ui/app.py` & `ui/styles.py`)
 
-L'UI est au cœur de l'UX "Non-technique".
+L'UI est au cœur de l'UX "Zéro Terminal" et adopte une esthétique "SaaS Moderne" (inspirée de Linear/Vercel). Streamlit est utilisé comme moteur de rendu, mais son apparence par défaut est totalement surchargée par un Design System sur-mesure (Tailwind-like).
 
-**Le Premier Lancement (UX Téléchargement) :**
-- L'application est livrée sans le modèle lourd Whisper pour réduire la taille du ZIP.
-- Au premier lancement, l'UI Streamlit affiche une belle carte : *"Initialisation du moteur d'IA..."* avec une barre de progression de téléchargement (via `huggingface_hub`). L'utilisateur reste dans l'application.
+**4.1 Design System & CSS**
+- **Typographie :** `Inter` via Google Fonts, importée dans le CSS.
+- **Palette "Dim Mode" :** Fond `#09090b` (Zinc-950), Cartes `#18181b` (Zinc-900), Accents `#2e74fd` (Bleu Électrique) et `#38bdf8` (Cyan).
+- **Composants Hybrides :** Utilisation de `st.markdown(..., unsafe_allow_html=True)` pour créer des "Metric Cards", des badges (Pills) et des conteneurs avec bordures adoucies (`border-radius: 12px` ou `8px`).
 
-**Gestion du Threading (UI Réactive) :**
-```python
-# Dans app.py
-if st.button("Lancer la transcription"):
-    # 1. Préparer une queue de messages
-    st.session_state.progress_queue = queue.Queue()
-    st.session_state.stop_event = threading.Event()
-    
-    # 2. Lancer le thread
-    t = threading.Thread(
-        target=transcribe_batch_threaded, 
-        args=(..., st.session_state.progress_queue, st.session_state.stop_event)
-    )
-    add_script_run_ctx(t) # Streamlit thread context
-    t.start()
-    st.session_state.is_processing = True
+**4.2 Agencement de l'Interface**
+- **Sidebar "Glassmorphism" :** Affiche le statut matériel (GPU/VRAM) avec des badges visuels, le choix du modèle Whisper, et des avertissements de confidentialité.
+- **Hero Section :** Logo centré ou aligné à gauche avec un titre épuré et des tags de fonctionnalités (Zéro Réseau, Accélération GPU).
+- **Zone de Lancement :** Utilisation d'un sélecteur stylisé pour basculer entre le mode Batch (Dossier) et le mode Fichier. Zone de Drag & Drop mise en évidence.
 
-# 3. Boucle de rafraîchissement UI
-if st.session_state.get("is_processing"):
-    while not st.session_state.progress_queue.empty():
-        msg = st.session_state.progress_queue.get()
-        # Mettre à jour les widgets (Barre de progression, status...)
-    time.sleep(0.5)
-    st.rerun()
-```
+**4.3 Gestion de l'État et Threading (UX Réactive)**
+- L'UI ne gèle jamais grâce au module `threading` et à l'échange de messages via `queue.Queue`.
+- **Feedback visuel :** Pendant le traitement, l'UI affiche une barre de progression fluide, le fichier en cours, et une vue "Streaming" affichant la transcription en temps réel.
+- **Toasts :** Les événements (succès, erreurs) utilisent des notifications flottantes pour ne pas casser la mise en page.
 
 ---
 
