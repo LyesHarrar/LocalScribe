@@ -6,9 +6,12 @@ imageio-ffmpeg>=0.5.1
 streamlit>=1.40.0
 streamlit-shadcn-ui>=0.1.28
 
-# Desktop — Fenêtre native
+# Desktop — Fenêtre native & Packaging
 pywebview>=5.0
 requests>=2.31.0
+pyinstaller>=6.0.0
+pillow>=10.0.0
 
 # Utilitaires
 pyperclip>=1.9.0
+

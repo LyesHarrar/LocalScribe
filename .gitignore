@@ -10,3 +10,8 @@ venv/
 output/
 scratch/
 screenshot*.png
+build/
+dist/
+*.spec
+*.exe
+

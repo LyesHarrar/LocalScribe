@@ -48,7 +48,7 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Phase 0 — Scaffolding** : *Arborescence, UI de base et config terminées.*
 - [x] **Phase 1 — Moteur & Threading** : *Implémentée et validée (profiler, formatteur, moteur).*
 - [x] **Phase 2 — UI & UX** : *Interface Streamlit complète (upload, multithread, templates LLM, design modernisé).*
-- [ ] **Phase 3 — Desktop & Lanceur** : *Prêt à démarrer.*
+- [x] **Phase 3 — Desktop & Lanceur** : *Implémentée (run_app.py pywebview, détection WebView2, launcher.py et LocalScribe.exe).*
 
 ---
-*Dernière mise à jour par l'Agent : Phase 2 (UI & UX) terminée.*
+*Dernière mise à jour par l'Agent : Phase 3 (Desktop & Lanceur) terminée sur feature/phase-3-desktop-launcher.*
