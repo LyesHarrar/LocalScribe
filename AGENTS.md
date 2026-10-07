@@ -46,9 +46,9 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Documentation Initiale** : PRD et Spécifications Techniques générées et validées.
 - [x] **Initialisation Agentique** : `AGENTS.md` créé. Branche `feature/phase-0-scaffolding` active.
 - [x] **Phase 0 — Scaffolding** : *Arborescence, UI de base et config terminées.*
-- [ ] **Phase 1 — Moteur & Threading** : *Prêt à démarrer.*
-- [ ] **Phase 2 — UI & UX** : *À faire.*
+- [x] **Phase 1 — Moteur & Threading** : *Implémentée et validée (profiler, formatteur, moteur).*
+- [ ] **Phase 2 — UI & UX** : *Prêt à démarrer.*
 - [ ] **Phase 3 — Desktop & Lanceur** : *À faire.*
 
 ---
-*Dernière mise à jour par l'Agent : Phase d'initialisation.*
+*Dernière mise à jour par l'Agent : Phase 1 (Moteur & Threading) terminée.*
