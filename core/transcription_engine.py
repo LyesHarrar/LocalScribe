@@ -10,10 +10,13 @@ from faster_whisper import WhisperModel
 from core.hardware_profiler import HardwareProfile
 from core.text_formatter import generate_srt, generate_txt, generate_markdown
 
-# Ajout dynamique du binaire ffmpeg au PATH pour éviter toute configuration manuelle
-ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-ffmpeg_dir = os.path.dirname(ffmpeg_exe)
-os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+try:
+    import imageio_ffmpeg
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_dir = os.path.dirname(ffmpeg_exe)
+    os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+except Exception:
+    pass
 
 def transcribe_file_threaded(
     file_path: Path,
