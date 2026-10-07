@@ -1,7 +1,6 @@
 """
-LocalScribe — Interface Utilisateur Moderne (Streamlit + Shadcn UI).
-Supporte la transcription par dossier (récursive avec .txt in-place et Smart Resume)
-ainsi que la transcription de fichier unique.
+LocalScribe — Interface Utilisateur Haute Fidélité (Design System Épuré).
+Assorti au logo : Noir Obsidienne (#05070e) & Bleu Électrique (#2e74fd).
 """
 
 import os
@@ -19,7 +18,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
-import streamlit_shadcn_ui as ui
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 from ui.styles import inject_custom_css
@@ -34,7 +32,7 @@ from core.transcription_engine import (
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
 
 def open_folder_in_explorer(folder_path: Path):
-    """Ouvre le dossier dans l'explorateur Windows ou le gestionnaire de fichiers."""
+    """Ouvre le dossier dans l'explorateur de fichiers natif."""
     try:
         if sys.platform == "win32":
             os.startfile(str(folder_path))
@@ -46,7 +44,7 @@ def open_folder_in_explorer(folder_path: Path):
         pass
 
 def select_folder_dialog() -> str:
-    """Ouvre la boîte de dialogue native pour sélectionner un dossier."""
+    """Ouvre le sélecteur natif de dossier Windows/Mac."""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -59,38 +57,49 @@ def select_folder_dialog() -> str:
     except Exception:
         return ""
 
+def render_metric_card(label: str, value: str, subtext: str = ""):
+    """Rendu d'une carte métrique au style Framer / Linear."""
+    st.markdown(f"""
+    <div style="background: #090e1c; border: 1px solid rgba(46, 116, 253, 0.18); border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
+        <div style="color: #94a3b8; font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem;">{label}</div>
+        <div style="color: #ffffff; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em;">{value}</div>
+        <div style="color: #64748b; font-size: 0.76rem; margin-top: 0.2rem;">{subtext}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_badge(text: str, color: str = "#60a5fa", bg: str = "rgba(46, 116, 253, 0.12)"):
+    """Badge pill moderne."""
+    return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{text}</span>"""
+
 def render_sidebar():
-    """Affiche la barre latérale avec logo et options de configuration."""
+    """Barre latérale avec configuration et matériel."""
     with st.sidebar:
         if LOGO_PATH.exists():
             st.image(str(LOGO_PATH), use_container_width=True)
         else:
             st.title("🎙️ LocalScribe")
             
-        st.markdown("### ⚙️ Matériel & Accélération")
+        st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown("### ⚙️ Accélération Matérielle")
         
-        # Détection matérielle
         if "hw_profile" not in st.session_state:
             st.session_state.hw_profile = detect_hardware()
             
         profile = st.session_state.hw_profile
         
-        col_dev, col_comp = st.columns(2)
-        with col_dev:
-            st.caption("Périphérique")
-            dev_badge_variant = "default" if profile.device == "cuda" else "secondary"
-            ui.badge(profile.device.upper(), variant=dev_badge_variant)
-        with col_comp:
-            st.caption("Précision")
-            ui.badge(profile.compute_type, variant="outline")
-            
+        # Badges matériels
+        dev_badge = render_badge(f"⚡ {profile.device.upper()}", color="#38bdf8", bg="rgba(56, 189, 248, 0.12)") if profile.device == "cuda" else render_badge(f"💻 {profile.device.upper()}", color="#94a3b8", bg="rgba(148, 163, 184, 0.12)")
+        comp_badge = render_badge(f"🎯 {profile.compute_type}", color="#818cf8", bg="rgba(129, 140, 248, 0.12)")
+        
+        st.markdown(f"<div>{dev_badge}{comp_badge}</div>", unsafe_allow_html=True)
+        
         if profile.vram_gb:
-            st.caption(f"VRAM disponible : **{profile.vram_gb:.1f} GB**")
+            st.markdown(f"<div style='color: #94a3b8; font-size: 0.85rem; margin-top: 0.6rem;'>VRAM Détectée : <strong style='color: #f8fafc;'>{profile.vram_gb:.1f} GB</strong></div>", unsafe_allow_html=True)
             
         for warning in profile.warnings:
             st.warning(warning)
             
-        st.markdown("<hr style='margin: 1rem 0; opacity: 0.15;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
         
         st.markdown("### 🧠 Modèle Whisper")
         model_options = ["tiny", "base", "small", "medium", "large-v3"]
@@ -100,13 +109,18 @@ def render_sidebar():
             "Taille du modèle",
             options=model_options,
             index=default_index,
-            help="Modèles plus grands = meilleure précision mais plus lents. 'medium' est optimal pour une RTX 3060."
+            help="Modèles plus grands = meilleure précision. 'medium' est idéal pour les cartes NVIDIA RTX 3060."
         )
         st.session_state.selected_model = selected_model
-        st.caption(f"Recommandation auto : `{profile.recommended_model}`")
+        st.caption(f"Recommandation système : `{profile.recommended_model}`")
         
-        st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.15;'>", unsafe_allow_html=True)
-        st.caption("🛡️ **100% Local & Privé**\nAucune donnée n'est transmise sur internet.")
+        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="background: rgba(46, 116, 253, 0.05); border: 1px solid rgba(46, 116, 253, 0.15); border-radius: 10px; padding: 0.85rem;">
+            <div style="font-weight: 600; color: #38bdf8; font-size: 0.82rem;">🛡️ Confidentialité Absolue</div>
+            <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.2rem;">Aucun appel réseau. Zéro donnée partagée. Inférence 100% exécutée sur vos puces locales.</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def save_uploaded_file(uploaded_file) -> Path:
     """Sauvegarde temporaire du fichier uploadé pour traitement local."""
@@ -119,7 +133,7 @@ def save_uploaded_file(uploaded_file) -> Path:
 
 def main():
     st.set_page_config(
-        page_title="LocalScribe — Transcription Locale",
+        page_title="LocalScribe — Transcription Locale Haute Fidélité",
         page_icon="🎙️",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -127,29 +141,29 @@ def main():
     inject_custom_css()
     render_sidebar()
     
-    # En-tête Principal
+    # En-tête Principal de l'Application
     col_logo, col_header = st.columns([1, 6])
     with col_logo:
         if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=100)
+            st.image(str(LOGO_PATH), width=105)
     with col_header:
-        st.title("LocalScribe")
-        st.caption("Transcription audio & vidéo haute performance, 100 % locale et sécurisée.")
-        ui.badges([
-            ("🔒 100% Hors-Ligne", "default"),
-            ("📁 Traitement par Dossier (In-Place)", "secondary"),
-            ("⚡ GPU RTX CUDA Actif", "outline")
-        ])
+        st.markdown("<h1>LocalScribe</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #94a3b8; font-size: 1rem; margin-top: -0.2rem;'>Transcription audio & vidéo 100 % locale, privée et propulsée par faster-whisper.</p>", unsafe_allow_html=True)
         
-    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
+        badges_html = (
+            render_badge("🔒 Zéro Réseau", color="#38bdf8", bg="rgba(56, 189, 248, 0.1)") +
+            render_badge("📁 Batch In-Place", color="#60a5fa", bg="rgba(46, 116, 253, 0.1)") +
+            render_badge("⚡ Accélération RTX CUDA", color="#34d399", bg="rgba(52, 211, 153, 0.1)")
+        )
+        st.markdown(f"<div style='margin-top: 0.3rem;'>{badges_html}</div>", unsafe_allow_html=True)
+        
+    st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
     # Initialisation de l'état
     if "is_processing" not in st.session_state:
         st.session_state.is_processing = False
     if "transcription_done" not in st.session_state:
         st.session_state.transcription_done = False
-    if "mode" not in st.session_state:
-        st.session_state.mode = "batch" # Par défaut : mode dossier
     if "target_folder" not in st.session_state:
         st.session_state.target_folder = ""
     if "latest_text" not in st.session_state:
@@ -157,7 +171,7 @@ def main():
     if "batch_stats" not in st.session_state:
         st.session_state.batch_stats = {}
 
-    # Sélecteur de Mode
+    # Sélecteur de Mode Segmenté
     mode_selection = st.radio(
         "Mode de traitement :",
         options=["📁 Dossier complet (Tous les sous-dossiers & fichiers .txt in-place)", "📄 Fichier unique (Glisser-déposer)"],
@@ -173,20 +187,24 @@ def main():
         
         # --- MODE 1 : DOSSIER COMPLET (BATCH RÉCURSIF IN-PLACE) ---
         if is_batch_mode:
-            st.markdown("### 📁 Sélection du dossier de vidéos")
-            st.info(
-                "LocalScribe va analyser le dossier choisi ainsi que **tous ses sous-dossiers**. "
-                "Chaque vidéo sera retranscrite sous forme d'un fichier **`.txt` portant exactement le même nom**, "
-                "placé **directement à côté de la vidéo**. Si un fichier `.txt` existe déjà, il sera automatiquement ignoré (Smart Resume)."
-            )
+            st.markdown("### 📁 Sélection du dossier racine")
+            st.markdown("""
+            <div style="background: rgba(46, 116, 253, 0.04); border: 1px solid rgba(46, 116, 253, 0.15); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+                <div style="color: #e2e8f0; font-size: 0.92rem; line-height: 1.5;">
+                    LocalScribe va analyser récursivement ce dossier et <strong>l'ensemble de ses sous-dossiers</strong>. 
+                    Chaque vidéo sera retranscrite sous forme d'un fichier <strong>.txt</strong> portant le même nom, 
+                    <strong>déposé directement à côté de la vidéo</strong>. Les vidéos déjà transcrites seront ignorées automatiquement (<em>Smart Resume</em>).
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
             col_path, col_btn = st.columns([5, 1])
             with col_path:
                 target_input = st.text_input(
-                    "Chemin du dossier :",
+                    "Chemin d'accès au dossier :",
                     value=st.session_state.target_folder,
                     placeholder=r"Exemple : C:\Users\Nom\Vidéos\Formations",
-                    help="Entrez le chemin absolu du dossier ou utilisez le bouton Parcourir."
+                    help="Collez le chemin d'accès ou cliquez sur Parcourir."
                 )
                 if target_input:
                     st.session_state.target_folder = target_input
@@ -198,7 +216,7 @@ def main():
                         st.session_state.target_folder = picked
                         st.rerun()
 
-            # Analyse en direct du dossier si spécifié
+            # Analyse dynamique du dossier
             current_folder = Path(st.session_state.target_folder).resolve() if st.session_state.target_folder else None
             if current_folder and current_folder.exists() and current_folder.is_dir():
                 found_files = [
@@ -211,24 +229,25 @@ def main():
                 
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
-                    ui.metric_card("Vidéos détectées", total_found, description="Dans le dossier & sous-dossiers")
+                    render_metric_card("Vidéos Détectées", str(total_found), "Dans l'arborescence complète")
                 with col_m2:
-                    ui.metric_card("Déjà transcrites (.txt)", already_done, description="Ignorées (Smart Resume)")
+                    render_metric_card("Déjà Transcrites (.txt)", str(already_done), "Ignorées (Smart Resume)")
                 with col_m3:
-                    ui.metric_card("Restantes à traiter", remaining, description="À convertir")
+                    render_metric_card("Restantes à Traiter", str(remaining), "À convertir par Whisper")
 
-                # Options d'export supplémentaires
-                st.markdown("##### Options de génération :")
+                st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
+                st.markdown("##### ⚙️ Options de sortie :")
                 col_opt1, col_opt2, col_opt3 = st.columns(3)
                 with col_opt1:
-                    st.checkbox("📄 Fichier texte brut (.txt)", value=True, disabled=True, help="Toujours généré dans le même dossier que la vidéo.")
+                    st.checkbox("📄 Texte brut (.txt)", value=True, disabled=True, help="Toujours généré in-place à côté de chaque vidéo.")
                 with col_opt2:
                     export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=False, help="Générer également un fichier .srt à côté de chaque vidéo.")
                 with col_opt3:
-                    export_md = st.checkbox("📝 Markdown structuré (.md)", value=False, help="Générer également un fichier .md avec front-matter.")
+                    export_md = st.checkbox("📝 Markdown (.md)", value=False, help="Générer également un fichier .md avec métadonnées front-matter.")
 
+                st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
                 if total_found > 0:
-                    if st.button("🚀 Démarrer la transcription du dossier", type="primary", use_container_width=True):
+                    if st.button("🚀 Lancer la transcription du dossier", type="primary", use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -256,15 +275,15 @@ def main():
                         t.start()
                         st.rerun()
                 else:
-                    st.warning("Aucun fichier vidéo ou audio supporté trouvé dans ce dossier.")
+                    st.warning("Aucun fichier vidéo ou audio supporté trouvé dans ce répertoire.")
             elif st.session_state.target_folder:
-                st.error("Le chemin spécifié n'existe pas ou n'est pas un dossier valide.")
+                st.error("Le dossier spécifié n'existe pas ou n'est pas accessible.")
 
         # --- MODE 2 : FICHIER UNIQUE (GLISSER-DÉPOSER) ---
         else:
             st.markdown("### 📄 Importer un enregistrement individuel")
             uploaded_file = st.file_uploader(
-                "Glissez-déposez un fichier audio ou vidéo",
+                "Glissez-déposez votre fichier ici",
                 type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov"],
                 help="Formats supportés : MP3, WAV, M4A, OGG, FLAC, MP4, MKV, MOV"
             )
@@ -272,13 +291,14 @@ def main():
             if uploaded_file:
                 col_info1, col_info2, col_info3 = st.columns(3)
                 with col_info1:
-                    ui.metric_card("Fichier", uploaded_file.name, description="Nom source")
+                    render_metric_card("Fichier", uploaded_file.name, "Fichier source")
                 with col_info2:
                     file_size_mb = uploaded_file.size / (1024 * 1024)
-                    ui.metric_card("Taille", f"{file_size_mb:.2f} MB", description="Poids du fichier")
+                    render_metric_card("Taille", f"{file_size_mb:.2f} MB", "Poids du fichier")
                 with col_info3:
-                    ui.metric_card("Modèle", st.session_state.selected_model, description="Whisper sélectionné")
+                    render_metric_card("Modèle Actif", st.session_state.selected_model, "faster-whisper")
                     
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 if st.button("🚀 Démarrer la transcription", type="primary", use_container_width=True):
                     file_path = save_uploaded_file(uploaded_file)
                     output_dir = PROJECT_ROOT / "output"
@@ -313,7 +333,6 @@ def main():
     # =========================================================================
     elif st.session_state.is_processing:
         st.markdown("### ⏳ Transcription en cours...")
-        
         is_batch = st.session_state.get("is_batch", False)
         
         col_bar, col_stop = st.columns([5, 1])
@@ -323,7 +342,6 @@ def main():
                 total_files = st.session_state.get("total_batch_files", 1)
                 file_name = st.session_state.get("current_file_name", "")
                 
-                # Double barre : avancement du lot et avancement du fichier en cours
                 batch_pct = int((current_idx / total_files) * 100) if total_files > 0 else 0
                 st.markdown(f"**Progression globale : Vidéo {current_idx} / {total_files}**")
                 st.progress(batch_pct)
@@ -337,6 +355,7 @@ def main():
                 st.markdown(f"**Statut :** `{st.session_state.get('status_label', 'En cours...')}`")
                 
         with col_stop:
+            st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
             if st.button("🛑 Interrompre", type="secondary", use_container_width=True):
                 st.session_state.stop_event.set()
                 st.session_state.is_processing = False
@@ -388,10 +407,11 @@ def main():
                 st.warning("Traitement arrêté par l'utilisateur.")
                 st.rerun()
                 
-        # Flux en direct
+        # Aperçu en direct du texte retranscrit
         if st.session_state.latest_text:
+            st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
             st.markdown("##### 🎙️ Flux retranscrit en direct :")
-            preview = st.session_state.latest_text[-400:]
+            preview = st.session_state.latest_text[-350:]
             st.info(f"... {preview}")
             
         time.sleep(0.3)
@@ -409,27 +429,26 @@ def main():
             
             col_b1, col_b2, col_b3 = st.columns(3)
             with col_b1:
-                ui.metric_card("Total analysé", stats.get("total", 0), description="Vidéos dans le dossier")
+                render_metric_card("Total Analysé", str(stats.get("total", 0)), "Vidéos dans l'arborescence")
             with col_b2:
-                ui.metric_card("Nouvellement transcrites", stats.get("processed", 0), description="Fichiers .txt générés in-place")
+                render_metric_card("Nouvellement Transcrites", str(stats.get("processed", 0)), "Fichiers .txt générés in-place")
             with col_b3:
-                ui.metric_card("Déjà existantes", stats.get("skipped", 0), description="Ignorées (Smart Resume)")
+                render_metric_card("Déjà Existantes", str(stats.get("skipped", 0)), "Ignorées (Smart Resume)")
                 
-            st.markdown("---")
+            st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
             folder_path = Path(st.session_state.target_folder)
             st.markdown(f"Tous les fichiers **`.txt`** ont été enregistrés directement à côté de chaque vidéo dans :  \n`{folder_path.resolve()}`")
             
-            if st.button("📂 Ouvrir le dossier dans l'explorateur", type="primary"):
+            if st.button("📂 Ouvrir le dossier dans l'explorateur Windows", type="primary"):
                 open_folder_in_explorer(folder_path)
                 
-            st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.15;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
             if st.button("🔄 Traiter un autre dossier", use_container_width=True):
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""
                 st.rerun()
         else:
-            # Affichage fichier unique
             st.success("🎉 Transcription terminée avec succès !")
             file_path = st.session_state.current_file
             out_dir = st.session_state.output_dir
@@ -442,10 +461,15 @@ def main():
             md_text = md_file.read_text(encoding="utf-8") if md_file.exists() else ""
             srt_text = srt_file.read_text(encoding="utf-8") if srt_file.exists() else ""
             
-            tab_options = ["📄 Texte (.TXT)", "📝 Markdown (.MD)", "⏱️ Sous-titres (.SRT)", "🤖 Templates LLM"]
-            active_tab = ui.tabs(options=tab_options, key="results_tabs_nav")
+            # Onglets élégants Linear / Shadcn
+            tab_txt, tab_md, tab_srt, tab_llm = st.tabs([
+                "📄 Texte Brut (.txt)", 
+                "📝 Markdown (.md)", 
+                "⏱️ Sous-titres (.srt)", 
+                "🤖 Prompts LLM"
+            ])
             
-            if active_tab == "📄 Texte (.TXT)":
+            with tab_txt:
                 st.download_button(
                     label="📥 Télécharger le fichier texte (.txt)",
                     data=txt_text,
@@ -455,7 +479,7 @@ def main():
                 )
                 st.text_area("Transcription brute :", value=txt_text, height=350)
                 
-            elif active_tab == "📝 Markdown (.MD)":
+            with tab_md:
                 st.download_button(
                     label="📥 Télécharger le Markdown (.md)",
                     data=md_text,
@@ -465,7 +489,7 @@ def main():
                 )
                 st.markdown(md_text)
                 
-            elif active_tab == "⏱️ Sous-titres (.SRT)":
+            with tab_srt:
                 st.download_button(
                     label="📥 Télécharger les Sous-titres (.srt)",
                     data=srt_text,
@@ -475,10 +499,10 @@ def main():
                 )
                 st.code(srt_text, language="text")
                 
-            elif active_tab == "🤖 Templates LLM":
+            with tab_llm:
                 render_llm_templates(transcription_text=txt_text)
                 
-            st.markdown("<hr style='margin: 2rem 0; opacity: 0.15;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
             if st.button("🔄 Nouvelle transcription", use_container_width=True):
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
