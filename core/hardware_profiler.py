@@ -1,4 +1,5 @@
 import platform
+import subprocess
 from dataclasses import dataclass, field
 from typing import Optional, List
 
@@ -11,15 +12,55 @@ class HardwareProfile:
     warnings: List[str] = field(default_factory=list)
 
 def get_vram_gb() -> Optional[float]:
-    """Tente de récupérer la VRAM disponible via PyTorch, sans crasher si absent."""
+    """
+    Récupère la VRAM disponible sans dépendance obligatoire à PyTorch.
+    1. Tente via nvidia-smi (rapide, standard sur Windows & Linux)
+    2. Tente via torch si présent
+    """
+    # 1. Tentative via nvidia-smi
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=2
+        )
+        first_line = res.stdout.strip().splitlines()[0]
+        return round(float(first_line) / 1024, 1)
+    except Exception:
+        pass
+
+    # 2. Tentative via PyTorch
     try:
         import torch
         if torch.cuda.is_available():
-            # torch.cuda.get_device_properties renvoie la mémoire en octets
-            return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            mem_bytes = torch.cuda.get_device_properties(0).total_memory
+            return round(mem_bytes / (1024 ** 3), 1)
     except Exception:
         pass
+
     return None
+
+def is_cuda_available() -> bool:
+    """Vérifie si CUDA est disponible pour CTranslate2 ou Torch."""
+    # 1. Vérification directe via CTranslate2 (notre moteur réel)
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return True
+    except Exception:
+        pass
+
+    # 2. Vérification alternative via Torch
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return True
+    except Exception:
+        pass
+
+    return False
 
 def detect_hardware() -> HardwareProfile:
     """Détecte l'accélération matérielle et recommande un profil optimisé."""
@@ -30,33 +71,29 @@ def detect_hardware() -> HardwareProfile:
     vram_gb = None
 
     # 1. Vérification CUDA
-    try:
-        import torch
-        if torch.cuda.is_available():
-            device = "cuda"
-            vram_gb = get_vram_gb()
-            
-            if vram_gb is not None:
-                if vram_gb >= 8:
-                    compute_type = "float16"
-                    recommended_model = "large-v3"
-                elif vram_gb >= 4:
-                    compute_type = "int8_float16"
-                    recommended_model = "medium"
-                else:
-                    compute_type = "int8"
-                    recommended_model = "small"
-            else:
-                compute_type = "float16"
-                recommended_model = "base"
-    except ImportError:
-        warnings.append("PyTorch n'est pas installé. La détection VRAM précise (CUDA) est désactivée.")
+    if is_cuda_available():
+        device = "cuda"
+        vram_gb = get_vram_gb()
 
-    # 2. Vérification MPS (Apple Silicon Mac)
-    if device == "cpu" and platform.system() == "Darwin" and platform.machine() == "arm64":
-        # Pour Mac Apple Silicon, CTranslate2 préfère 'cpu' (qui utilise Accelerate/NEON en interne)
-        # Mais Faster-Whisper est souvent utilisé en 'cpu' ou avec torch 'mps'. 
-        # CTranslate2 ne supporte pas MPS nativement comme "device", on utilise donc "cpu" + int8
+        if vram_gb is not None:
+            if vram_gb >= 8:
+                compute_type = "float16"
+                recommended_model = "large-v3"
+            elif vram_gb >= 5.5: # Ex: RTX 3060 6GB
+                compute_type = "float16"
+                recommended_model = "medium"
+            elif vram_gb >= 4:
+                compute_type = "int8_float16"
+                recommended_model = "medium"
+            else:
+                compute_type = "int8"
+                recommended_model = "small"
+        else:
+            compute_type = "float16"
+            recommended_model = "small"
+
+    # 2. Vérification Apple Silicon Mac (ARM64)
+    elif platform.system() == "Darwin" and platform.machine() == "arm64":
         device = "cpu"
         compute_type = "int8"
         recommended_model = "small"
