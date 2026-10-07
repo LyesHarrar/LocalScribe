@@ -44,11 +44,11 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 *Ceci est le tracker de l'agent. Il reflète l'état réel et vérifié du projet.*
 
 - [x] **Documentation Initiale** : PRD et Spécifications Techniques générées et validées.
-- [x] **Initialisation Agentique** : `AGENTS.md` créé. Branche `feature/phase-0-scaffolding` active.
+- [x] **Initialisation Agentique** : `AGENTS.md` créé.
 - [x] **Phase 0 — Scaffolding** : *Arborescence, UI de base et config terminées.*
 - [x] **Phase 1 — Moteur & Threading** : *Implémentée et validée (profiler, formatteur, moteur).*
-- [ ] **Phase 2 — UI & UX** : *Prêt à démarrer.*
-- [ ] **Phase 3 — Desktop & Lanceur** : *À faire.*
+- [x] **Phase 2 — UI & UX** : *Interface Streamlit complète (upload, multithread, templates LLM, design modernisé).*
+- [ ] **Phase 3 — Desktop & Lanceur** : *Prêt à démarrer.*
 
 ---
-*Dernière mise à jour par l'Agent : Phase 1 (Moteur & Threading) terminée.*
+*Dernière mise à jour par l'Agent : Phase 2 (UI & UX) terminée.*

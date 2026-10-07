@@ -31,10 +31,6 @@ L'outil doit s'éloigner de l'aspect "Script Data Science" pour adopter une esth
 
 * **Typographie :** Utilisation stricte de la police **`Inter`** (ou système sans-serif moderne) pour une lisibilité optimale.
 * **Palette de Couleurs ("Dim Mode" Reposant) :**
-  * `Background` (Fond principal) : `#0f172a` (Slate 900)
-  * `Surface` (Panneaux, Sidebar) : `#1e293b` (Slate 800)
-  * `Texte` : `#f8fafc` (Slate 50)
-  * `Accent` (Boutons, Progress bar) : `#6366f1` (Indigo/Bleu-Violet)
 * **Composants :** Intégration de `streamlit-shadcn-ui` (si applicable) ou du CSS Tailwind-like pour des boutons épurés, des switches modernes et des bordures douces. Le fichier `.streamlit/config.toml` devra forcer ces paramètres esthétiques.
 
 ---
