@@ -192,6 +192,26 @@ def transcribe_file_threaded(
             if target.exists():
                 target.unlink()
             tmp.rename(target)
+
+        # Enregistrement automatique dans l'historique SQLite
+        try:
+            from core.history_manager import add_record
+            add_record({
+                "filename": file_path.name,
+                "filepath": str(file_path),
+                "duration": duration,
+                "language": detected_lang,
+                "language_probability": lang_prob,
+                "task": task,
+                "model": model_to_use,
+                "speakers": detected_speakers if detected_speakers else None,
+                "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else "",
+                "txt_path": str(out_txt),
+                "md_path": str(out_md),
+                "srt_path": str(out_srt)
+            })
+        except Exception:
+            pass
             
         progress_queue.put({
             "status": "file_complete",
@@ -397,6 +417,26 @@ def transcribe_batch_threaded(
                 if out_md.exists():
                     out_md.unlink()
                 tmp_md.rename(out_md)
+
+            # Enregistrement automatique dans l'historique SQLite
+            try:
+                from core.history_manager import add_record
+                add_record({
+                    "filename": file_path.name,
+                    "filepath": str(file_path),
+                    "duration": duration,
+                    "language": detected_lang,
+                    "language_probability": lang_prob,
+                    "task": task,
+                    "model": model_to_use,
+                    "speakers": detected_speakers if detected_speakers else None,
+                    "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else "",
+                    "txt_path": str(out_txt),
+                    "md_path": str(out_md) if export_md else "",
+                    "srt_path": str(out_srt) if export_srt else ""
+                })
+            except Exception:
+                pass
 
             processed_count += 1
             progress_queue.put({
