@@ -67,5 +67,29 @@ class TestHardwareProfiler(unittest.TestCase):
             self.assertEqual(profile.recommended_model, "base")
             self.assertTrue(any("cuBLAS" in w for w in profile.warnings))
 
+    def test_configure_cuda_paths_non_windows(self):
+        from core.hardware_profiler import configure_cuda_paths
+        import core.hardware_profiler as hp
+        with patch("sys.platform", "darwin"):
+            orig_configured = hp._CUDA_CONFIGURED
+            try:
+                hp._CUDA_CONFIGURED = False
+                res = configure_cuda_paths()
+                self.assertEqual(res, [])
+            finally:
+                hp._CUDA_CONFIGURED = orig_configured
+
+    def test_configure_cuda_paths_idempotent(self):
+        from core.hardware_profiler import configure_cuda_paths
+        import core.hardware_profiler as hp
+        orig_configured = hp._CUDA_CONFIGURED
+        try:
+            hp._CUDA_CONFIGURED = True
+            res = configure_cuda_paths()
+            self.assertEqual(res, [])
+        finally:
+            hp._CUDA_CONFIGURED = orig_configured
+
+
 if __name__ == "__main__":
     unittest.main()

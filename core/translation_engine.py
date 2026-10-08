@@ -10,6 +10,8 @@ import re
 import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Callable
+from core.hardware_profiler import configure_cuda_paths
+configure_cuda_paths()
 
 import ctranslate2
 from tokenizers import Tokenizer

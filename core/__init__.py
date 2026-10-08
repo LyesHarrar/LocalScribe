@@ -2,6 +2,9 @@
 LocalScribe — Package Core.
 """
 
+from core.hardware_profiler import configure_cuda_paths
+configure_cuda_paths()
+
 from core.version import (
     __version__,
     __author__,

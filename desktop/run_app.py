@@ -197,6 +197,13 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
     if sys.platform == "win32":
         creation_flags = subprocess.CREATE_NO_WINDOW
         
+    # Configuration des chemins d'accès CUDA / GPU
+    try:
+        from core.hardware_profiler import configure_cuda_paths
+        configure_cuda_paths()
+    except Exception:
+        pass
+
     # Configurer l'environnement d'exécution
     env = os.environ.copy()
     bin_dir = root / "bin"

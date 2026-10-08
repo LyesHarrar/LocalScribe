@@ -15,7 +15,9 @@ import logging
 
 logger = logging.getLogger("LocalScribe.Engine")
 
-from core.hardware_profiler import HardwareProfile
+from core.hardware_profiler import HardwareProfile, configure_cuda_paths
+configure_cuda_paths()
+
 from core.text_formatter import generate_srt, generate_txt, generate_markdown
 
 # Résolution résiliente du binaire FFmpeg via imageio-ffmpeg ou système
