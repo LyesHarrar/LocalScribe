@@ -156,8 +156,16 @@ def find_available_port(preferred_port: int = 8501) -> int:
     Si occupé, alloue un port éphémère libre pour éviter tout conflit.
     """
     try:
+        # 1. Vérification proactive : un processus écoute-t-il déjà activement ?
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as test_sock:
+            test_sock.settimeout(0.3)
+            if test_sock.connect_ex(("127.0.0.1", preferred_port)) == 0:
+                raise OSError(f"Port {preferred_port} already in use")
+
+        # 2. Vérification exclusive d'attribution de port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE") and sys.platform == "win32":
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             s.bind(("127.0.0.1", preferred_port))
             return preferred_port
     except (OSError, socket.error):
@@ -197,6 +205,13 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
     if sys.platform == "win32":
         creation_flags = subprocess.CREATE_NO_WINDOW
         
+    # Configuration des chemins d'accès CUDA / GPU
+    try:
+        from core.hardware_profiler import configure_cuda_paths
+        configure_cuda_paths()
+    except Exception:
+        pass
+
     # Configurer l'environnement d'exécution
     env = os.environ.copy()
     bin_dir = root / "bin"

@@ -346,6 +346,55 @@ CUSTOM_CSS = """
     div[data-testid="stButtonGroup"] button[data-selected="true"] span {
         color: #ffffff !important;
     }
+
+    /* 17. Boutons Popover (Guide, Version, etc.) */
+    div[data-testid="stPopover"] {
+        width: 100% !important;
+        min-width: fit-content !important;
+    }
+    div[data-testid="stPopover"] > button {
+        width: 100% !important;
+        min-width: fit-content !important;
+        white-space: nowrap !important;
+        padding: 0.45rem 0.75rem !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        border-radius: 9px !important;
+        background-color: #18181b !important;
+        border: 1px solid #27272a !important;
+        color: #e2e8f0 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+        transition: all 0.2s ease !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        overflow: visible !important;
+    }
+    div[data-testid="stPopover"] > button:hover {
+        background-color: #27272a !important;
+        border-color: #38bdf8 !important;
+        color: #ffffff !important;
+    }
+    div[data-testid="stPopover"] > button div[data-testid="stMarkdownContainer"] {
+        display: inline-flex !important;
+        align-items: center !important;
+        overflow: visible !important;
+    }
+    div[data-testid="stPopover"] > button p,
+    div[data-testid="stPopover"] > button span,
+    div[data-testid="stPopover"] > button div {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        font-size: 0.85rem !important;
+        margin: 0 !important;
+    }
+    div[data-testid="stPopover"] > button svg {
+        flex-shrink: 0 !important;
+        min-width: 14px !important;
+        margin-left: 2px !important;
+    }
 </style>
 """
 

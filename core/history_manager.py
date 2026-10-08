@@ -260,8 +260,16 @@ def clear_history(db_path: Optional[Path] = None) -> bool:
     conn = get_db_connection(db_path)
     try:
         with conn:
-            conn.execute("DELETE FROM transcriptions")
+            cursor = conn.execute("DELETE FROM transcriptions")
+            try:
+                conn.execute("DELETE FROM sqlite_sequence WHERE name='transcriptions'")
+            except sqlite3.OperationalError:
+                pass
+            logger.info(f"Historique complet vidé ({cursor.rowcount} enregistrements supprimés).")
             return True
+    except Exception as e:
+        logger.error(f"Erreur lors de la suppression de l'historique : {e}")
+        return False
     finally:
         conn.close()
 

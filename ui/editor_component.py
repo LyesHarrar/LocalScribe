@@ -266,26 +266,51 @@ def render_editor_tab(
     file_path: Optional[Path],
     output_dir: Path,
     base_name: str,
-    record_id: Optional[int] = None
+    record_id: Optional[int] = None,
+    key_prefix: Optional[str] = None
 ) -> None:
     """
     Rendu complet de l'onglet Éditeur Audio-Texte & Synchronisation.
     Prend en charge la réconciliation des segments, l'écoute ciblée, la recherche/remplacement
     et la sauvegarde atomique immédiate vers tous les formats et SQLite.
+    Tous les éléments d'interface sont préfixés par une clé unique pour éviter les collisions.
     """
-    # 1. Initialisation / Récupération des segments
-    if "result_segments" not in st.session_state or not st.session_state.result_segments:
-        srt_file = output_dir / f"{base_name}.srt"
-        if srt_file.exists():
-            st.session_state.result_segments = parse_srt(srt_file.read_text(encoding="utf-8"))
-        else:
-            st.session_state.result_segments = []
+    import re
+    # 0. Définition du préfixe unique de clé pour Streamlit
+    if key_prefix:
+        pfx = f"{key_prefix}_"
+    elif record_id is not None:
+        pfx = f"rec_{record_id}_"
+    else:
+        safe_base = re.sub(r'[^a-zA-Z0-9_]', '_', base_name)
+        pfx = f"ed_{safe_base}_"
 
-    segments: List[TranscriptionSegment] = st.session_state.result_segments
+    # 1. Initialisation / Récupération des segments
+    seg_state_key = f"{pfx}segments"
+    if seg_state_key not in st.session_state or not st.session_state[seg_state_key]:
+        if record_id is not None and f"hist_segs_{record_id}" in st.session_state and st.session_state[f"hist_segs_{record_id}"]:
+            st.session_state[seg_state_key] = st.session_state[f"hist_segs_{record_id}"]
+        elif "result_segments" in st.session_state and st.session_state.result_segments and record_id is None:
+            st.session_state[seg_state_key] = st.session_state.result_segments
+        else:
+            srt_file = output_dir / f"{base_name}.srt"
+            if srt_file.exists():
+                st.session_state[seg_state_key] = parse_srt(srt_file.read_text(encoding="utf-8"))
+            else:
+                st.session_state[seg_state_key] = []
+
+    segments: List[TranscriptionSegment] = st.session_state[seg_state_key]
 
     if not segments:
         st.info("Aucun segment de transcription disponible pour l'édition.")
         return
+
+    def _update_segments(new_segs: List[TranscriptionSegment]) -> None:
+        st.session_state[seg_state_key] = new_segs
+        if record_id is not None:
+            st.session_state[f"hist_segs_{record_id}"] = new_segs
+        else:
+            st.session_state.result_segments = new_segs
 
     # 2. Section Lecteur Audio & Synchronisation
     audio_exists = file_path and file_path.exists()
@@ -300,7 +325,8 @@ def render_editor_tab(
                 "Mode de lecture :",
                 options=["✨ Karaoké Synchronisé (Saut & Défilement auto)", "🎵 Lecteur Standard"],
                 horizontal=True,
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key=f"{pfx}player_mode"
             )
         with col_ctrl2:
             st.caption(f"Fichier : `{file_path.name}` ({file_size_mb:.1f} MB)")
@@ -308,7 +334,8 @@ def render_editor_tab(
         if "Karaoké" in player_mode and file_size_mb <= 60.0:
             render_karaoke_html_player(file_path, segments, container_height=380)
         else:
-            seek_time = float(st.session_state.get("editor_seek_time", 0.0))
+            seek_key = f"{pfx}seek_time"
+            seek_time = float(st.session_state.get(seek_key, 0.0))
             if seek_time > 0.0:
                 st.caption(f"⏱️ Position d'écoute : `{format_timestamp_short(seek_time)}`")
             st.audio(str(file_path), start_time=int(seek_time))
@@ -325,20 +352,20 @@ def render_editor_tab(
     with st.expander("🔍 Rechercher et remplacer dans tout le document", expanded=False):
         col_f1, col_f2, col_f3, col_f4 = st.columns([2.5, 2.5, 1.5, 1.5])
         with col_f1:
-            find_str = st.text_input("Rechercher :", key="find_input", placeholder="Ex: Whispere")
+            find_str = st.text_input("Rechercher :", key=f"{pfx}find_input", placeholder="Ex: Whispere")
         with col_f2:
-            replace_str = st.text_input("Remplacer par :", key="replace_input", placeholder="Ex: Whisper")
+            replace_str = st.text_input("Remplacer par :", key=f"{pfx}replace_input", placeholder="Ex: Whisper")
         with col_f3:
             st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
-            match_case = st.checkbox("Casse exacte", key="chk_match_case")
+            match_case = st.checkbox("Casse exacte", key=f"{pfx}chk_match_case")
         with col_f4:
             st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
-            if st.button("Remplacer tout", key="btn_exec_replace", use_container_width=True):
+            if st.button("Remplacer tout", key=f"{pfx}btn_exec_replace", use_container_width=True):
                 if find_str.strip():
                     new_segs, count = search_and_replace_segments(
                         segments, find_str.strip(), replace_str, match_case=match_case
                     )
-                    st.session_state.result_segments = new_segs
+                    _update_segments(new_segs)
                     st.toast(f"✅ {count} occurrence(s) remplacée(s) !", icon="✏️")
                     st.rerun()
                 else:
@@ -351,15 +378,15 @@ def render_editor_tab(
             "Vue d'édition :",
             options=[":material/view_agenda: Cartes & Écoute par segment", ":material/table_chart: Grille Tabulaire Multi-lignes"],
             horizontal=True,
-            key="editor_display_mode"
+            key=f"{pfx}editor_display_mode"
         )
     with col_save_top:
         st.markdown("<div style='margin-top: 0.3rem;'></div>", unsafe_allow_html=True)
-        if st.button("💾 Enregistrer toutes les modifications", type="primary", use_container_width=True, key="btn_save_top"):
+        if st.button("💾 Enregistrer toutes les modifications", type="primary", use_container_width=True, key=f"{pfx}btn_save_top"):
             res = save_edited_transcription(
                 output_dir=output_dir,
                 base_name=base_name,
-                segments=st.session_state.result_segments,
+                segments=st.session_state[seg_state_key],
                 metadata={"filename": f"{base_name}.mp3"},
                 record_id=record_id
             )
@@ -383,24 +410,21 @@ def render_editor_tab(
             with col_p1:
                 st.caption(f"Affichage de {total_segs} segments (Page 1 à {num_pages})")
             with col_p2:
-                current_page = st.selectbox("Page :", options=list(range(1, num_pages + 1)), index=0) - 1
+                current_page = st.selectbox("Page :", options=list(range(1, num_pages + 1)), index=0, key=f"{pfx}page_select") - 1
 
         start_idx = current_page * PAGE_SIZE
         end_idx = min(start_idx + PAGE_SIZE, total_segs)
 
-        has_modifications = False
-
         for idx in range(start_idx, end_idx):
             s = segments[idx]
-            card_id = f"seg_edit_{idx}"
             
             with st.container():
                 col_btn, col_spk, col_act1, col_act2 = st.columns([1.6, 2, 1.2, 0.8])
                 with col_btn:
                     # Bouton d'écoute ciblée
                     time_label = f"▶️ {format_timestamp_short(s.start)}"
-                    if st.button(time_label, key=f"btn_play_{idx}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", use_container_width=True):
-                        st.session_state.editor_seek_time = s.start
+                    if st.button(time_label, key=f"{pfx}btn_play_{idx}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", use_container_width=True):
+                        st.session_state[f"{pfx}seek_time"] = s.start
                         st.rerun()
                 
                 with col_spk:
@@ -408,38 +432,36 @@ def render_editor_tab(
                     new_spk = st.text_input(
                         "Locuteur :", 
                         value=s.speaker or "", 
-                        key=f"spk_{idx}", 
+                        key=f"{pfx}spk_{idx}", 
                         label_visibility="collapsed",
                         placeholder="Locuteur (optionnel)"
                     )
                     if new_spk != (s.speaker or ""):
                         s.speaker = new_spk.strip() or None
-                        has_modifications = True
                 
                 with col_act1:
                     # Fusionner avec le segment suivant
                     if idx < total_segs - 1:
-                        if st.button("🔗 Fusionner", key=f"btn_merge_{idx}", help="Fusionner avec le segment suivant", use_container_width=True):
-                            st.session_state.result_segments = merge_adjacent_segments(segments, idx)
+                        if st.button("🔗 Fusionner", key=f"{pfx}btn_merge_{idx}", help="Fusionner avec le segment suivant", use_container_width=True):
+                            _update_segments(merge_adjacent_segments(segments, idx))
                             st.rerun()
                 
                 with col_act2:
                     # Supprimer le segment
-                    if st.button("🗑️", key=f"btn_del_{idx}", help="Supprimer ce segment", use_container_width=True):
-                        st.session_state.result_segments = delete_segment(segments, idx)
+                    if st.button("🗑️", key=f"{pfx}btn_del_{idx}", help="Supprimer ce segment", use_container_width=True):
+                        _update_segments(delete_segment(segments, idx))
                         st.rerun()
 
                 # Champ texte éditable
                 new_text = st.text_area(
                     label=f"Texte #{s.id} :",
                     value=s.text,
-                    key=f"txt_{idx}",
+                    key=f"{pfx}txt_{idx}",
                     height=70,
                     label_visibility="collapsed"
                 )
                 if new_text != s.text:
                     s.text = new_text.strip()
-                    has_modifications = True
 
                 st.markdown("<div style='margin-bottom: 0.6rem;'></div>", unsafe_allow_html=True)
 
@@ -471,11 +493,11 @@ def render_editor_tab(
                 "Locuteur": st.column_config.TextColumn("Locuteur", width="medium"),
                 "Texte": st.column_config.TextColumn("Texte", width="large")
             },
-            key="df_editor_table"
+            key=f"{pfx}df_editor_table"
         )
 
-        # Synchronisation du DataFrame vers result_segments
-        if st.button("📥 Appliquer les modifications du tableau", key="btn_sync_df", type="secondary", use_container_width=True):
+        # Synchronisation du DataFrame vers segments
+        if st.button("📥 Appliquer les modifications du tableau", key=f"{pfx}btn_sync_df", type="secondary", use_container_width=True):
             new_segs = []
             for i, row in edited_df.iterrows():
                 try:
@@ -490,7 +512,7 @@ def render_editor_tab(
                 except Exception as row_err:
                     logger.warning(f"Ligne de tableau ignorée : {row_err}")
             
-            st.session_state.result_segments = new_segs
+            _update_segments(new_segs)
             st.toast("Tableau synchronisé ! N'oubliez pas d'enregistrer.", icon="✅")
             st.rerun()
 
@@ -498,11 +520,11 @@ def render_editor_tab(
     st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
     col_save_b1, col_save_b2 = st.columns([1, 1])
     with col_save_b1:
-        if st.button("💾 Enregistrer et mettre à jour tous les formats", type="primary", use_container_width=True, key="btn_save_bottom"):
+        if st.button("💾 Enregistrer et mettre à jour tous les formats", type="primary", use_container_width=True, key=f"{pfx}btn_save_bottom"):
             res = save_edited_transcription(
                 output_dir=output_dir,
                 base_name=base_name,
-                segments=st.session_state.result_segments,
+                segments=st.session_state[seg_state_key],
                 metadata={"filename": f"{base_name}.mp3"},
                 record_id=record_id
             )
@@ -511,10 +533,10 @@ def render_editor_tab(
             st.rerun()
 
     with col_save_b2:
-        if st.button("📋 Copier le texte complet corrigé", key="btn_copy_edited_all", use_container_width=True):
+        if st.button("📋 Copier le texte complet corrigé", key=f"{pfx}btn_copy_edited_all", use_container_width=True):
             full_txt = "\n".join(
                 f"[{s.speaker}] {s.text}" if s.speaker else s.text
-                for s in st.session_state.result_segments
+                for s in st.session_state[seg_state_key]
             )
             if copy_to_clipboard(full_txt):
                 st.toast("Texte corrigé copié dans le presse-papier !", icon="📋")

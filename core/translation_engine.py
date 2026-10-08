@@ -10,6 +10,8 @@ import re
 import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Callable
+from core.hardware_profiler import configure_cuda_paths
+configure_cuda_paths()
 
 import ctranslate2
 from tokenizers import Tokenizer
@@ -84,7 +86,10 @@ def get_translation_models_dir() -> Path:
     local_dir = project_root / "models" / "translation"
     if local_dir.exists() and (local_dir / "model.bin").exists():
         return local_dir
-    cache_dir = Path.home() / ".cache" / "localscribe" / "translation"
+    try:
+        cache_dir = Path.home() / ".cache" / "localscribe" / "translation"
+    except Exception:
+        cache_dir = Path(tempfile.gettempdir()) / ".cache" / "localscribe" / "translation"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 

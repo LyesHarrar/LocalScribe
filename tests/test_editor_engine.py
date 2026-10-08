@@ -6,6 +6,7 @@ Vérifie la recherche/remplacement, fusion, découpe, suppression et sauvegarde 
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from core.text_formatter import TranscriptionSegment
 from core.history_manager import init_db, add_record, get_record_by_id
@@ -151,6 +152,48 @@ class TestEditorEngine(unittest.TestCase):
         self.assertIn("Texte corrigé pour Alice.", db_rec["transcript_text"])
         self.assertEqual(db_rec["speakers"], ["Alice", "Bob"])
         self.assertEqual(len(db_rec["segments"]), 2)
+
+    @patch("ui.editor_component.st")
+    def test_render_editor_tab_unique_keys(self, mock_st):
+        """Vérifie que chaque composant Streamlit reçoit une clé préfixée unique pour éviter StreamlitDuplicateElementKey."""
+        from unittest.mock import MagicMock
+        from ui.editor_component import render_editor_tab
+
+        session_dict = {}
+        mock_st.session_state = session_dict
+        mock_st.columns.side_effect = lambda n, **kwargs: [MagicMock() for _ in range(len(n) if isinstance(n, list) else n)]
+        mock_st.expander.return_value.__enter__.return_value = MagicMock()
+        mock_st.container.return_value.__enter__.return_value = MagicMock()
+        mock_st.radio.return_value = "Cartes"
+        mock_st.button.return_value = False
+        mock_st.text_input.return_value = ""
+
+        srt_file = self.output_dir / "test_unique.srt"
+        srt_file.write_text("1\n00:00:00,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+
+        # Appel 1 pour le premier enregistrement
+        render_editor_tab(
+            file_path=None,
+            output_dir=self.output_dir,
+            base_name="test_unique",
+            record_id=101,
+            key_prefix="hist_101"
+        )
+
+        # Appel 2 pour le deuxième enregistrement
+        render_editor_tab(
+            file_path=None,
+            output_dir=self.output_dir,
+            base_name="test_unique",
+            record_id=102,
+            key_prefix="hist_102"
+        )
+
+        # Vérifier que toutes les clés text_input sont correctement préfixées
+        text_input_keys = [c.kwargs.get("key") for c in mock_st.text_input.call_args_list]
+        self.assertIn("hist_101_find_input", text_input_keys)
+        self.assertIn("hist_102_find_input", text_input_keys)
+        self.assertNotIn("find_input", text_input_keys)
 
 
 if __name__ == "__main__":

@@ -930,6 +930,170 @@ class TestTranscriptionEngine(unittest.TestCase):
             batch_comp = [m for m in messages if m["status"] == "batch_complete"][0]
             self.assertIn("total_elapsed_seconds", batch_comp)
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_batch_excludes_ls_opt_temp_files(self, mock_whisper_class):
+        """Vérifie que les résidus temporaires ls_opt_* sont ignorés lors du scan de dossier."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+        class DummySegment:
+            start = 0.0
+            end = 5.0
+            text = "Test"
+            
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f_real = tmp_path / "cours.mp4"
+            f_opt = tmp_path / "ls_opt_123_cours.wav"
+            f_real.write_bytes(b"video")
+            f_opt.write_bytes(b"opt")
+
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_batch_threaded(
+                target_dir=tmp_path,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            discovered = [m for m in messages if m.get("status") == "batch_discovered"]
+            self.assertEqual(len(discovered), 1)
+            # Seul cours.mp4 doit être découvert, ls_opt_* doit être ignoré !
+            self.assertEqual(discovered[0]["total_files"], 1)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_cuda_cublas_fallback(self, mock_whisper_class):
+        """Vérifie le repli automatique transparent sur CPU en cas d'absence de DLL cuBLAS."""
+        mock_cuda_model = MagicMock()
+        mock_cpu_model = MagicMock()
+
+        # Le modèle CUDA lève RuntimeError cublas64_12.dll lors du premier transcribe
+        mock_cuda_model.transcribe.side_effect = RuntimeError("Library cublas64_12.dll is not found")
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+        class DummySegment:
+            start = 0.0
+            end = 5.0
+            text = "Repli réussi"
+
+        mock_cpu_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+
+        def side_effect_whisper(*args, **kwargs):
+            if kwargs.get("device") == "cuda":
+                return mock_cuda_model
+            return mock_cpu_model
+
+        mock_whisper_class.side_effect = side_effect_whisper
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cuda", "float16", "medium")
+
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            warnings = [m for m in messages if m.get("status") == "warning"]
+            self.assertTrue(len(warnings) > 0)
+            self.assertTrue(any("cuBLAS" in w.get("warning", "") for w in warnings))
+
+            file_comp = [m for m in messages if m.get("status") == "file_complete"]
+            self.assertEqual(len(file_comp), 1)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_custom_beam_size(self, mock_whisper_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                beam_size=1
+            )
+            
+            mock_model.transcribe.assert_called_once()
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("beam_size"), 1)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_with_custom_beam_size(self, mock_whisper_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio1.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                files=[fake_audio],
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                beam_size=1
+            )
+            
+            mock_model.transcribe.assert_called_once()
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("beam_size"), 1)
 
 if __name__ == "__main__":
     unittest.main()

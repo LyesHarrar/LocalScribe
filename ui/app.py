@@ -50,10 +50,10 @@ from core.version import (
     __version__,
     __author__,
     __github_repo__,
-    __github_author__,
     check_for_updates,
 )
 from ui.editor_component import render_editor_tab
+from core.impact_estimator import estimate_impact, ImpactEstimate
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
 
@@ -122,8 +122,76 @@ def render_badge(text: str, color: str = "#60a5fa", bg: str = "rgba(46, 116, 253
     parsed_text = re.sub(r':material/([^:]+):', r'<span class="material-symbols-rounded" style="font-family: \'Material Symbols Rounded\' !important; font-size: 1.1em; margin-right: 4px; vertical-align: -0.125em;">\1</span>', text)
     return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{parsed_text}</span>"""
 
+def render_impact_card(est: ImpactEstimate):
+    """Affiche une carte dynamique d'estimation de performance et précision sans parsing markdown."""
+    if est.speed_score >= 8:
+        speed_color = "#34d399"
+        speed_grad = "linear-gradient(90deg, #10b981, #34d399)"
+        speed_text = "Ultra-rapide"
+    elif est.speed_score >= 5:
+        speed_color = "#60a5fa"
+        speed_grad = "linear-gradient(90deg, #3b82f6, #60a5fa)"
+        speed_text = "Rapide"
+    elif est.speed_score >= 3:
+        speed_color = "#f59e0b"
+        speed_grad = "linear-gradient(90deg, #d97706, #f59e0b)"
+        speed_text = "Modéré"
+    else:
+        speed_color = "#f87171"
+        speed_grad = "linear-gradient(90deg, #ef4444, #f87171)"
+        speed_text = "Lent"
+
+    if est.accuracy_score >= 9:
+        acc_color = "#a78bfa"
+        acc_grad = "linear-gradient(90deg, #7c3aed, #a78bfa)"
+    elif est.accuracy_score >= 7:
+        acc_color = "#38bdf8"
+        acc_grad = "linear-gradient(90deg, #0284c7, #38bdf8)"
+    else:
+        acc_color = "#94a3b8"
+        acc_grad = "linear-gradient(90deg, #64748b, #94a3b8)"
+
+    tips_html = ""
+    if est.tips:
+        tips_items = "".join([f"<li style='margin-bottom: 2px;'>{tip}</li>" for tip in est.tips])
+        tips_html = f"<div style='margin-top: 0.5rem; padding-top: 0.4rem; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 0.73rem; color: #94a3b8;'><ul style='margin: 0; padding-left: 1.1rem; line-height: 1.4;'>{tips_items}</ul></div>"
+
+    card_html = (
+        f"<div style='background: #11131a; border: 1px solid #232738; border-radius: 12px; padding: 0.85rem 1rem; margin: 0.75rem 0 1rem 0; box-shadow: 0 4px 16px rgba(0,0,0,0.25);'>"
+        f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem;'>"
+        f"<span style='font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8;'>Impact Estimé</span>"
+        f"<span style='font-size: 0.72rem; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 7px; border-radius: 9999px; font-weight: 700;'>⚡ ~{est.speed_factor:.1f}x réel</span>"
+        f"</div>"
+        f"<div style='margin-bottom: 0.5rem;'>"
+        f"<div style='display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;'>"
+        f"<span style='color: #cbd5e1;'>Vitesse :</span>"
+        f"<strong style='color: {speed_color};'>{speed_text} ({est.speed_score}/10)</strong>"
+        f"</div>"
+        f"<div style='background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;'>"
+        f"<div style='background: {speed_grad}; width: {est.speed_score * 10}%; height: 100%; border-radius: 4px;'></div>"
+        f"</div>"
+        f"</div>"
+        f"<div style='margin-bottom: 0.5rem;'>"
+        f"<div style='display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;'>"
+        f"<span style='color: #cbd5e1;'>Précision :</span>"
+        f"<strong style='color: {acc_color};'>{est.accuracy_label} ({est.accuracy_score}/10)</strong>"
+        f"</div>"
+        f"<div style='background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;'>"
+        f"<div style='background: {acc_grad}; width: {est.accuracy_score * 10}%; height: 100%; border-radius: 4px;'></div>"
+        f"</div>"
+        f"</div>"
+        f"<div style='display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.02); padding: 5px 8px; border-radius: 6px; font-size: 0.75rem; color: #94a3b8; border: 1px solid rgba(255,255,255,0.04);'>"
+        f"<span>⏱️</span>"
+        f"<span>30 min d'audio traitées en : <strong style='color: #f1f5f9;'>{est.est_30min_str}</strong></span>"
+        f"</div>"
+        f"{tips_html}"
+        f"</div>"
+    )
+    st.html(card_html)
+
+
 def render_sidebar():
-    """Barre latérale avec configuration et matériel."""
+    """Barre latérale épurée avec profils 1-clic, jauge dynamique et options avancées."""
     with st.sidebar:
         if LOGO_PATH.exists():
             st.image(str(LOGO_PATH), use_container_width=True)
@@ -152,174 +220,313 @@ def render_sidebar():
             
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         
-        st.markdown("### :material/memory: Modèle Whisper")
-        model_options = ["tiny", "base", "small", "medium", "large-v3"]
-        default_index = model_options.index(profile.recommended_model) if profile.recommended_model in model_options else 1
+        # -------------------------------------------------------------
+        # 1. Macro-Profils 1-Clic
+        # -------------------------------------------------------------
+        st.markdown("### :material/speed: Profil de transcription")
         
-        selected_model = st.selectbox(
-            "Taille du modèle",
-            options=model_options,
-            index=default_index,
-            help="Modèles plus grands = meilleure précision. 'medium' est idéal pour les cartes NVIDIA RTX 3060."
-        )
-        st.session_state.selected_model = selected_model
-        st.caption(f"Recommandation système : `{profile.recommended_model}`")
+        preset_options = [
+            "⚡ Éclair (Ultra-Rapide)",
+            "⚖️ Équilibré (Recommandé)",
+            "🎯 Studio (Haute Précision)",
+            "⚙️ Personnalisé"
+        ]
         
-        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-        st.markdown("### :material/tune: Options Audio & IA")
+        if "selected_preset" not in st.session_state:
+            st.session_state.selected_preset = "⚖️ Équilibré (Recommandé)"
+            st.session_state.selected_model = "small"
+            st.session_state.beam_size = 1
 
-        # 1. Tâche
-        task_choice = st.radio(
-            "Tâche :",
-            options=["🎙️ Transcrire", "🌐 Traduire vers l'anglais"],
-            index=0,
-            help="'Transcrire' préserve la langue originale. 'Traduire vers l'anglais' traduit directement le texte en anglais."
+        curr_p_idx = 1
+        for idx, opt in enumerate(preset_options):
+            if opt.startswith(st.session_state.selected_preset[:3]):
+                curr_p_idx = idx
+                break
+
+        selected_preset = st.radio(
+            "Profil :",
+            options=preset_options,
+            index=curr_p_idx,
+            help="Sélectionnez un profil pré-calibré ou passez en Personnalisé pour tout ajuster manuellement.",
+            label_visibility="collapsed",
+            key="preset_radio_selector"
         )
-        st.session_state.selected_task = "translate" if "Traduire" in task_choice else "transcribe"
+        st.session_state.selected_preset = selected_preset
 
-        # 2. Langue source
+        if "Éclair" in selected_preset:
+            st.session_state.selected_model = "base"
+            st.session_state.beam_size = 1
+            st.caption("⚡ Base • Beam 1 : Idéal cours, réunions et vidéos longues.")
+        elif "Équilibré" in selected_preset:
+            st.session_state.selected_model = "small"
+            st.session_state.beam_size = 1
+            st.caption("⚖️ Small • Beam 1 : Le compromis parfait vitesse / fidélité.")
+        elif "Studio" in selected_preset:
+            st.session_state.selected_model = "medium"
+            st.session_state.beam_size = 5
+            st.caption("🎯 Medium • Beam 5 : Reconnaissance poussée pour jargon et interviews pro.")
+        else:
+            st.caption("⚙️ Réglages manuels configurables dans les Options Avancées ci-dessous.")
+
+        st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
+
+        # -------------------------------------------------------------
+        # 2. Langue Parlée (Sélecteur immédiat)
+        # -------------------------------------------------------------
         lang_keys = list(SUPPORTED_LANGUAGES.keys())
         lang_labels = list(SUPPORTED_LANGUAGES.values())
+        curr_lang_idx = 0
+        if "selected_language" in st.session_state and st.session_state.selected_language:
+            if st.session_state.selected_language in lang_keys:
+                curr_lang_idx = lang_keys.index(st.session_state.selected_language)
+
         selected_lang_label = st.selectbox(
-            "Langue source :",
+            "🌐 Langue audio :",
             options=lang_labels,
-            index=0,
+            index=curr_lang_idx,
             help="Langue parlée dans l'audio. Laissez sur Détection automatique si vous hésitez."
         )
         selected_lang_code = lang_keys[lang_labels.index(selected_lang_label)]
         st.session_state.selected_language = None if selected_lang_code == "auto" else selected_lang_code
 
-        # 3. Filtre VAD (Voice Activity Detection)
-        use_vad = st.checkbox(
-            "Filtrer les silences (Silero VAD)",
-            value=True,
-            help="Supprime les silences pour accélérer le traitement et éliminer les hallucinations."
+        # -------------------------------------------------------------
+        # 3. Jauge Interactive en Temps Réel
+        # -------------------------------------------------------------
+        est = estimate_impact(
+            device=profile.device,
+            model_size=st.session_state.get("selected_model", "small"),
+            beam_size=st.session_state.get("beam_size", 1),
+            preprocess_audio=st.session_state.get("preprocess_audio", False),
+            normalize_volume=st.session_state.get("normalize_volume", False),
+            denoise=st.session_state.get("denoise_audio", False),
+            diarize=st.session_state.get("use_diarization", False),
+            task=st.session_state.get("selected_task", "transcribe")
         )
-        st.session_state.use_vad = use_vad
+        render_impact_card(est)
 
-        # 4. Vocabulaire spécifique / Noms propres
-        initial_prompt = st.text_input(
-            "Vocabulaire & Acronymes (Optionnel) :",
-            value="",
-            placeholder="ex: LocalScribe, Whisper, Kubernetes...",
-            help="Indiquez des mots rares, acronymes ou noms propres pour améliorer leur reconnaissance."
-        )
-        st.session_state.initial_prompt = initial_prompt.strip() if initial_prompt else None
-
-        # 5. Diarisation des locuteurs (Identification qui parle)
-        use_diarization = st.checkbox(
-            "🗣️ Identifier les locuteurs (Diarisation)",
-            value=False,
-            help="Distingue les voix et attribue chaque segment à un interlocuteur distinct (ex: Locuteur 1, Locuteur 2)."
-        )
-        st.session_state.use_diarization = use_diarization
-
-        num_speakers = None
-        if use_diarization:
-            speaker_choice = st.radio(
-                "Nombre d'interlocuteurs :",
-                options=["Auto-détection", "Nombre exact"],
-                horizontal=True
-            )
-            if speaker_choice == "Nombre exact":
-                num_speakers = st.number_input(
-                    "Nombre de locuteurs :",
-                    min_value=1,
-                    max_value=10,
-                    value=2,
-                    step=1
+        # -------------------------------------------------------------
+        # 4. Progressive Disclosure (Accordéon Options Avancées)
+        # -------------------------------------------------------------
+        with st.expander("🎛️ Options Spéciales & Avancées", expanded=("Personnalisé" in selected_preset)):
+            st.markdown("<div style='font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.6rem;'>Personnalisez vos modèles, filtres acoustiques et traductions.</div>", unsafe_allow_html=True)
+            
+            # Si mode personnalisé
+            if "Personnalisé" in selected_preset:
+                st.markdown("##### 🧠 Choix du Modèle Whisper")
+                model_options = ["tiny", "base", "small", "medium", "large-v3"]
+                model_labels = {
+                    "tiny": "⚡⚡ tiny (~39M params)",
+                    "base": "⚡ base (~74M params)",
+                    "small": "⚖️ small (~244M params)",
+                    "medium": "🎯 medium (~769M params)",
+                    "large-v3": "🔬 large-v3 (~1550M params)",
+                }
+                cur_m = st.session_state.get("selected_model", "small")
+                m_idx = model_options.index(cur_m) if cur_m in model_options else 2
+                chosen_m = st.selectbox(
+                    "Taille du modèle Whisper :",
+                    options=model_options,
+                    format_func=lambda m: model_labels.get(m, m),
+                    index=m_idx,
+                    key="sb_custom_model_select"
                 )
-        st.session_state.num_speakers = num_speakers
+                st.session_state.selected_model = chosen_m
 
-        # 6. Traduction Multilingue Hors-Ligne (NLLB-200)
-        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-        st.markdown("##### 🌐 Traduction Hors-Ligne (NLLB-200)")
-        
-        trans_options = ["Désactivée (langue originale)"] + [
-            f"{d['flag']} {d['name']}" for d in SUPPORTED_TRANSLATION_LANGUAGES.values()
-        ]
-        chosen_trans = st.selectbox(
-            "Traduire automatiquement vers :",
-            options=trans_options,
-            index=0,
-            help="Traduction neuronale 100% hors-ligne via Meta NLLB-200. Génère des fichiers traduits synchronisés (.txt, .srt, .md)."
-        )
-        
-        target_trans_code = None
-        if chosen_trans != "Désactivée (langue originale)":
-            for c, d in SUPPORTED_TRANSLATION_LANGUAGES.items():
-                if d["name"] in chosen_trans:
-                    target_trans_code = c
-                    break
-        st.session_state.target_translation_code = target_trans_code
-        
-        model_ready = is_translation_model_installed()
-        if model_ready:
-            st.markdown(
-                render_badge("✅ Modèle NLLB-200 prêt", color="#34d399", bg="rgba(52, 211, 153, 0.1)"), 
-                unsafe_allow_html=True
+                speed_mode = st.radio(
+                    "Vitesse de décodage :",
+                    options=["⚡ Mode Rapide (Beam 1 • 2x plus rapide)", "🎯 Mode Précis (Beam 5 • Analyse poussée)"],
+                    index=0 if st.session_state.get("beam_size", 1) == 1 else 1,
+                    key="sb_custom_beam_select"
+                )
+                st.session_state.beam_size = 1 if "Beam 1" in speed_mode else 5
+                st.divider()
+
+            # Tâche (Transcrire vs Traduire anglais)
+            task_choice = st.radio(
+                "Tâche :",
+                options=["🎙️ Transcrire", "🌐 Traduire vers l'anglais"],
+                index=0 if st.session_state.get("selected_task", "transcribe") == "transcribe" else 1,
+                help="'Transcrire' préserve la langue originale. 'Traduire vers l'anglais' traduit directement le texte en anglais."
             )
-        else:
-            st.markdown(
-                render_badge("⚠️ Modèle non téléchargé", color="#f59e0b", bg="rgba(245, 158, 11, 0.1)"), 
-                unsafe_allow_html=True
+            st.session_state.selected_task = "translate" if "Traduire" in task_choice else "transcribe"
+
+            # Filtre VAD (Silero)
+            use_vad = st.checkbox(
+                "Filtrer les silences (Silero VAD)",
+                value=st.session_state.get("use_vad", True),
+                help="Supprime les silences pour accélérer le traitement et éliminer les hallucinations."
             )
-            if st.button("📥 Télécharger NLLB-200 (622 Mo)", key="btn_dl_nllb_sidebar", use_container_width=True):
-                with st.spinner("Téléchargement du modèle de traduction en cours (622 Mo)..."):
-                    try:
-                        ensure_translation_model()
-                        st.success("Modèle téléchargé avec succès !")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erreur de téléchargement : {e}")
+            st.session_state.use_vad = use_vad
 
-        # 7. Prétraitement Acoustique & FFmpeg
-        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-        st.markdown("### ⚡ Prétraitement Acoustique")
-        
-        ffmpeg_ok = is_ffmpeg_available()
-        if ffmpeg_ok:
-            st.markdown(
-                render_badge("⚡ FFmpeg Détecté", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
-                unsafe_allow_html=True
+            # Vocabulaire / Acronymes
+            initial_prompt = st.text_input(
+                "Vocabulaire & Acronymes (Optionnel) :",
+                value=st.session_state.get("initial_prompt", "") or "",
+                placeholder="ex: LocalScribe, Whisper, Kubernetes...",
+                help="Indiquez des mots rares, acronymes ou noms propres pour améliorer leur reconnaissance."
             )
-        else:
-            st.markdown(
-                render_badge("ℹ️ Repli direct (FFmpeg absent)", color="#94a3b8", bg="rgba(148, 163, 184, 0.1)"),
-                unsafe_allow_html=True
+            st.session_state.initial_prompt = initial_prompt.strip() if initial_prompt else None
+
+            # Diarisation des locuteurs
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            use_diarization = st.checkbox(
+                "🗣️ Identifier les locuteurs (Diarisation)",
+                value=st.session_state.get("use_diarization", False),
+                help="Distingue les voix et attribue chaque segment à un interlocuteur distinct (ex: Locuteur 1, Locuteur 2)."
             )
+            st.session_state.use_diarization = use_diarization
 
-        normalize_vol = st.checkbox(
-            "🔊 Normaliser le volume (Auto-Gain)",
-            value=True,
-            help="Égalise dynamiquement le volume sonore pour rehausser les voix faibles, chuchotées ou lointaines sans distorsion (filtre broadcast dynaudnorm)."
-        )
-        st.session_state.normalize_volume = normalize_vol
+            num_speakers = None
+            if use_diarization:
+                speaker_choice = st.radio(
+                    "Nombre d'interlocuteurs :",
+                    options=["Auto-détection", "Nombre exact"],
+                    horizontal=True
+                )
+                if speaker_choice == "Nombre exact":
+                    num_speakers = st.number_input(
+                        "Nombre de locuteurs :",
+                        min_value=1,
+                        max_value=10,
+                        value=st.session_state.get("num_speakers") or 2,
+                        step=1
+                    )
+            st.session_state.num_speakers = num_speakers
 
-        denoise_audio = st.checkbox(
-            "🧹 Réduire le bruit de fond (Denoising)",
-            value=False,
-            help="Filtre les bruits sourds de ventilation (HVAC) et sifflements de micro via des filtres passe-bande et suppression spectrale."
-        )
-        st.session_state.denoise_audio = denoise_audio
-        st.session_state.preprocess_audio = normalize_vol or denoise_audio
+            # Traduction Multilingue Hors-Ligne (NLLB-200)
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            st.markdown("##### 🌐 Traduction Hors-Ligne (NLLB-200)")
+            
+            trans_options = ["Désactivée (langue originale)"] + [
+                f"{d['flag']} {d['name']}" for d in SUPPORTED_TRANSLATION_LANGUAGES.values()
+            ]
+            
+            curr_trans_idx = 0
+            if st.session_state.get("target_translation_code"):
+                code = st.session_state.target_translation_code
+                if code in SUPPORTED_TRANSLATION_LANGUAGES:
+                    name = SUPPORTED_TRANSLATION_LANGUAGES[code]["name"]
+                    for i, o in enumerate(trans_options):
+                        if name in o:
+                            curr_trans_idx = i
+                            break
 
-        # 8. Notifications & Alertes Bureau
-        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-        st.markdown("##### 🔔 Notifications & Alertes")
-        enable_notif = st.checkbox(
-            "🔔 Notification bureau (Toast Windows)",
-            value=True,
-            help="Affiche une notification native dans le centre de notifications Windows à la fin du traitement."
-        )
-        st.session_state.enable_notifications = enable_notif
+            chosen_trans = st.selectbox(
+                "Traduire automatiquement vers :",
+                options=trans_options,
+                index=curr_trans_idx,
+                help="Traduction neuronale 100% hors-ligne via Meta NLLB-200. Génère des fichiers traduits synchronisés (.txt, .srt, .md)."
+            )
+            
+            target_trans_code = None
+            if chosen_trans != "Désactivée (langue originale)":
+                for c, d in SUPPORTED_TRANSLATION_LANGUAGES.items():
+                    if d["name"] in chosen_trans:
+                        target_trans_code = c
+                        break
+            st.session_state.target_translation_code = target_trans_code
+            
+            model_ready = is_translation_model_installed()
+            if model_ready:
+                st.markdown(
+                    render_badge("✅ Modèle NLLB-200 prêt", color="#34d399", bg="rgba(52, 211, 153, 0.1)"), 
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    render_badge("⚠️ Modèle non téléchargé", color="#f59e0b", bg="rgba(245, 158, 11, 0.1)"), 
+                    unsafe_allow_html=True
+                )
+                if st.button("📥 Télécharger NLLB-200 (622 Mo)", key="btn_dl_nllb_sidebar", use_container_width=True):
+                    with st.spinner("Téléchargement du modèle de traduction en cours (622 Mo)..."):
+                        try:
+                            ensure_translation_model()
+                            st.success("Modèle téléchargé avec succès !")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erreur de téléchargement : {e}")
 
-        enable_chime = st.checkbox(
-            "🔊 Alerte sonore discrète",
-            value=True,
-            help="Émet un carillon système Windows discret à la fin de la transcription."
-        )
-        st.session_state.enable_chime = enable_chime
+            # Prétraitement Acoustique & FFmpeg
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            st.markdown("##### ⚡ Prétraitement Acoustique")
+            
+            ffmpeg_ok = is_ffmpeg_available()
+            if ffmpeg_ok:
+                st.markdown(
+                    render_badge("⚡ FFmpeg Détecté", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    render_badge("ℹ️ Repli direct (FFmpeg absent)", color="#94a3b8", bg="rgba(148, 163, 184, 0.1)"),
+                    unsafe_allow_html=True
+                )
+
+            normalize_vol = st.checkbox(
+                "🔊 Rehausser les voix faibles (Auto-Gain dynaudnorm)",
+                value=st.session_state.get("normalize_volume", False),
+                help="Égalise dynamiquement le volume pour booster les voix chuchotées. Laissez désactivé pour vitesse maximale."
+            )
+            st.session_state.normalize_volume = normalize_vol
+
+            denoise_audio = st.checkbox(
+                "🧹 Réduire le bruit de fond (Denoising)",
+                value=st.session_state.get("denoise_audio", False),
+                help="Filtre les bruits sourds de ventilation et sifflements. Laissez désactivé pour vitesse maximale."
+            )
+            st.session_state.denoise_audio = denoise_audio
+            st.session_state.preprocess_audio = normalize_vol or denoise_audio
+
+            # Notifications & Alertes Bureau
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            st.markdown("##### 🔔 Notifications & Alertes")
+            enable_notif = st.checkbox(
+                "🔔 Notification bureau (Toast Windows)",
+                value=st.session_state.get("enable_notifications", True),
+                help="Affiche une notification native dans le centre de notifications Windows à la fin du traitement."
+            )
+            st.session_state.enable_notifications = enable_notif
+
+            enable_chime = st.checkbox(
+                "🔊 Alerte sonore discrète",
+                value=st.session_state.get("enable_chime", True),
+                help="Émet un carillon système Windows discret à la fin de la transcription."
+            )
+            st.session_state.enable_chime = enable_chime
+
+        # -------------------------------------------------------------
+        # 5. Widget d'avancement épinglé en cours de traitement
+        # -------------------------------------------------------------
+        if st.session_state.get("is_processing", False):
+            st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #3b82f6;'>", unsafe_allow_html=True)
+            st.markdown("### ⏳ Tâche en cours")
+            if st.session_state.get("is_batch", False):
+                c_idx = st.session_state.get("current_file_idx", 1)
+                t_files = st.session_state.get("total_batch_files", 1)
+                f_name = st.session_state.get("current_file_name", "")
+                f_pct = int(st.session_state.get("progress_pct", 0))
+                st.markdown(f"**Lot : Fichier {c_idx} / {t_files}**")
+                if f_name:
+                    disp_name = f"`{f_name[:22]}...`" if len(f_name) > 22 else f"`{f_name}`"
+                    st.caption(disp_name)
+                st.progress(f_pct)
+                speed = st.session_state.get("speed_str", "—")
+                eta = st.session_state.get("batch_eta_str", "Calcul...")
+                st.caption(f"⚡ Vitesse : **{speed}** • ETA lot : **{eta}**")
+            else:
+                pct = int(st.session_state.get("progress_pct", 0))
+                st.markdown("**Progression :**")
+                st.progress(pct)
+                speed = st.session_state.get("speed_str", "—")
+                eta = st.session_state.get("eta_str", "Calcul...")
+                st.caption(f"⚡ Vitesse : **{speed}** • ETA : **{eta}**")
+
+            if st.button("🛑 Interrompre", key="btn_stop_sidebar", type="secondary", use_container_width=True):
+                if "stop_event" in st.session_state and st.session_state.stop_event:
+                    st.session_state.stop_event.set()
+                st.session_state.is_processing = False
+                st.warning("Arrêt demandé...")
+                st.rerun()
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown(f"""
@@ -391,10 +598,21 @@ def render_history_view():
         )
     with col_action:
         if stats['total_count'] > 0:
-            if st.button("🗑️ Vider tout", type="secondary", use_container_width=True, help="Efface tout l'historique de la base locale"):
-                clear_history()
-                st.success("Historique vidé.")
-                st.rerun()
+            with st.popover("🗑️ Vider tout", use_container_width=True):
+                st.markdown("##### ⚠️ Effacer l'historique ?")
+                st.markdown(f"Cette action supprimera les **{stats['total_count']}** transcriptions enregistrées.")
+                st.caption("Les fichiers audio source sur votre disque restent préservés.")
+                if st.button("🔴 Confirmer la suppression", type="primary", use_container_width=True, key="btn_confirm_clear_history"):
+                    cleared = clear_history()
+                    # Nettoyer toutes les clés de session liées à l'historique
+                    for k in list(st.session_state.keys()):
+                        if k.startswith(("hist_", "rec_", "ed_hist_")):
+                            del st.session_state[k]
+                    if cleared:
+                        st.toast("Bibliothèque locale vidée avec succès !", icon="🗑️")
+                    else:
+                        st.toast("Erreur lors de la suppression.", icon="⚠️")
+                    st.rerun()
 
     # 3. Récupération des enregistrements
     records = get_records(query=search_query)
@@ -504,6 +722,10 @@ def render_history_view():
             with col_del:
                 if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", use_container_width=True, help="Supprimer cet enregistrement de la base"):
                     delete_record(rec_id)
+                    for k in list(st.session_state.keys()):
+                        if str(rec_id) in k:
+                            del st.session_state[k]
+                    st.toast("Transcription supprimée de l'historique !", icon="🗑️")
                     st.rerun()
 
             # Éditeur interactif & Synchronisation pour l'historique
@@ -528,7 +750,8 @@ def render_history_view():
                     file_path=h_file_path,
                     output_dir=h_out_dir,
                     base_name=h_base_name,
-                    record_id=rec_id
+                    record_id=rec_id,
+                    key_prefix=f"hist_{rec_id}"
                 )
 
             # Traduction à la demande pour l'historique
@@ -586,7 +809,7 @@ def main():
     render_sidebar()
     
     # En-tête Principal de l'Application
-    col_header_title, col_header_actions = st.columns([3.8, 1.4], vertical_alignment="center")
+    col_header_title, col_act_guide, col_act_pop = st.columns([3.0, 0.9, 1.0], vertical_alignment="center")
     
     with col_header_title:
         st.markdown(f"""
@@ -596,7 +819,7 @@ def main():
                 <span style="background: rgba(46, 116, 253, 0.15); color: #60a5fa; border: 1px solid rgba(46, 116, 253, 0.35); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;">v{__version__}</span>
             </div>
             <p style="color: #94a3b8; font-size: 0.93rem; margin-top: 0.2rem; margin-bottom: 0;">
-                Transcription audio & vidéo 100 % locale et privée • Conçu par <strong style="color: #e2e8f0;">{__author__}</strong>
+                Transcription audio & vidéo 100 % locale et privée
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -608,46 +831,70 @@ def main():
         )
         st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
 
-    with col_header_actions:
-        col_act_pop, col_act_git = st.columns([1.1, 1])
-        with col_act_pop:
-            with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
-                st.markdown(f"### LocalScribe `v{__version__}`")
-                st.markdown(f"**Développé par :** [{__author__}]({__github_author__})")
-                st.markdown(f"**Dépôt officiel :** [{__github_repo__.replace('https://', '')}]({__github_repo__})")
-                st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
-                st.divider()
+    with col_act_guide:
+        with st.popover("❓ Guide", use_container_width=True):
+            st.markdown("### 🚀 Guide Express LocalScribe")
+            st.markdown(
+                "**LocalScribe** est votre studio de transcription, diarisation et traduction "
+                "**100% autonome, hors-ligne et respectueux de votre vie privée**."
+            )
+            st.divider()
+            st.markdown("#### 🏁 3 étapes simples :")
+            st.markdown("""
+            1. **📁 Sélectionnez vos médias :**
+               - Glissez vos fichiers dans la **File d'attente**, ou
+               - Sélectionnez un dossier complet en **Mode Dossier**.
+            2. **⚡ Choisissez un profil (Sidebar) :**
+               - **⚡ Éclair :** Ultra-rapide (~11x à 15x temps réel). Idéal cours, réunions et contenus longs.
+               - **⚖️ Équilibré (Recommandé) :** Le compromis idéal vitesse / fidélité orthographique.
+               - **🎯 Studio :** Analyse approfondie mot à mot pour les interviews et jargons pointus.
+            3. **🚀 Lancez la transcription :**
+               - Suivez la vitesse et l'ETA en direct. Une notification Windows vous préviendra dès que c'est prêt !
+            """)
+            st.divider()
+            st.markdown("#### 💡 Boîte à outils incluse :")
+            st.markdown("""
+            - **🗣️ Diarisation :** Identifie et sépare automatiquement qui parle (*Locuteur 1, Locuteur 2*).
+            - **🌐 Traduction NLLB-200 :** Traduit vers 24 langues sans aucune connexion Internet.
+            - **✏️ Éditeur Karaoké :** Cliquez sur un segment pour réécouter l'audio synchronisé au timecode.
+            - **📚 Historique :** Retrouvez tous vos fichiers, cherchez dedans et exportez (.txt, .srt, .md) à tout moment.
+            """)
+            st.divider()
+            st.caption("🛡️ 100% Hors-Ligne • Zéro Télémétrie • Vos fichiers restent sur votre machine.")
+
+    with col_act_pop:
+        with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
+            st.markdown(f"### LocalScribe `v{__version__}`")
+            st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
+            st.divider()
+            
+            st.markdown("#### 🔄 Mises à jour")
+            if "update_info" not in st.session_state:
+                st.session_state.update_info = None
                 
-                st.markdown("#### 🔄 Mises à jour")
-                if "update_info" not in st.session_state:
-                    st.session_state.update_info = None
+            if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
+                with st.spinner("Vérification sur GitHub Releases..."):
+                    st.session_state.update_info = check_for_updates()
                     
-                if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
-                    with st.spinner("Vérification sur GitHub Releases..."):
-                        st.session_state.update_info = check_for_updates()
-                        
-                up_info = st.session_state.update_info
-                if up_info:
-                    if up_info["status"] == "up_to_date":
-                        st.success(f"✅ {up_info['message']}")
-                    elif up_info["status"] == "update_available":
-                        st.info(f"🚀 **Nouvelle version {up_info['latest_version']} disponible !**")
-                        if up_info.get("release_notes"):
-                            with st.expander("Notes de version (Changelog)"):
-                                st.markdown(up_info["release_notes"])
-                        st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
-                    elif up_info["status"] == "no_release":
-                        st.info(f"ℹ️ {up_info['message']}")
-                    elif up_info["status"] == "offline":
-                        st.warning(f"🌐 {up_info['message']}")
-                    else:
-                        st.caption(f"⚠️ {up_info['message']}")
-                        
-                st.divider()
-                st.caption("Licence MIT • 100% Open-Source & Gratuit")
-                
-        with col_act_git:
-            st.link_button("⭐ GitHub", __github_repo__, use_container_width=True)
+            up_info = st.session_state.update_info
+            if up_info:
+                if up_info["status"] == "up_to_date":
+                    st.success(f"✅ {up_info['message']}")
+                elif up_info["status"] == "update_available":
+                    st.info(f"🚀 **Nouvelle version {up_info['latest_version']} disponible !**")
+                    if up_info.get("release_notes"):
+                        with st.expander("Notes de version (Changelog)"):
+                            st.markdown(up_info["release_notes"])
+                    st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
+                elif up_info["status"] == "no_release":
+                    st.info(f"ℹ️ {up_info['message']}")
+                elif up_info["status"] == "offline":
+                    st.warning(f"🌐 {up_info['message']}")
+                else:
+                    st.caption(f"⚠️ {up_info['message']}")
+                    
+            st.divider()
+            st.caption("Licence MIT • 100% Open-Source & Gratuit")
     
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
@@ -675,6 +922,7 @@ def main():
     import streamlit_shadcn_ui as ui
 
     # Sélecteur de Mode Segmenté moderne
+    is_busy = st.session_state.get("is_processing", False)
     mode_selection = st.segmented_control(
         "Mode de transcription",
         options=[
@@ -685,8 +933,12 @@ def main():
         default=":material/upload_file: File d'attente (Multi-Fichiers)",
         selection_mode="single",
         label_visibility="collapsed",
+        disabled=is_busy,
         key="mode_segmented_control"
     )
+    if is_busy:
+        st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
+
     if not mode_selection:
         mode_selection = ":material/upload_file: File d'attente (Multi-Fichiers)"
     is_folder_mode = "Dossier" in mode_selection
@@ -696,7 +948,17 @@ def main():
     # VUE 1 : Configuration et Lancement / Bibliothèque
     # =========================================================================
     if not st.session_state.is_processing and not st.session_state.transcription_done:
-        
+        # Affichage d'un éventuel message d'erreur persistant
+        if st.session_state.get("last_error"):
+            col_err, col_dismiss = st.columns([6, 1])
+            with col_err:
+                st.error(f"⚠️ **Erreur lors du traitement précédent :** {st.session_state.last_error}")
+            with col_dismiss:
+                st.markdown("<div style='margin-top: 0.2rem;'></div>", unsafe_allow_html=True)
+                if st.button("✕ Fermer", key="btn_dismiss_last_error", use_container_width=True):
+                    del st.session_state["last_error"]
+                    st.rerun()
+
         # --- MODE 0 : HISTORIQUE & BIBLIOTHÈQUE ---
         if is_history_mode:
             render_history_view()
@@ -737,6 +999,7 @@ def main():
                 found_files = [
                     f for f in current_folder.rglob("*")
                     if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+                    and not f.name.startswith("ls_opt_")
                 ]
                 total_found = len(found_files)
                 already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
@@ -763,7 +1026,7 @@ def main():
 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 if total_found > 0:
-                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", use_container_width=True):
+                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -772,9 +1035,15 @@ def main():
                         st.session_state.progress_pct = 0
                         st.session_state.status_label = "Démarrage du lot..."
                         st.session_state.current_file_name = ""
-                        st.session_state.current_file_idx = 0
+                        st.session_state.current_file_idx = 1
                         st.session_state.total_batch_files = total_found
                         st.session_state.latest_text = ""
+                        st.session_state.speed_str = "—"
+                        st.session_state.eta_str = "Calcul..."
+                        st.session_state.batch_eta_str = "Calcul..."
+                        st.session_state.batch_elapsed_str = "00:00"
+                        if "last_error" in st.session_state:
+                            del st.session_state["last_error"]
                         
                         t = threading.Thread(
                             target=transcribe_batch_threaded,
@@ -793,9 +1062,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                         add_script_run_ctx(t)
@@ -870,7 +1140,7 @@ def main():
                     else f":material/rocket_launch: Lancer la file d'attente ({len(uploaded_files)} fichiers)"
                 )
                 
-                if st.button(btn_label, key="btn_launch_queue", type="primary", use_container_width=True):
+                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
                     saved_paths = [save_uploaded_file(f) for f in uploaded_files]
                     output_dir = PROJECT_ROOT / "output"
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -882,6 +1152,12 @@ def main():
                     st.session_state.progress_pct = 0
                     st.session_state.status_label = "Initialisation..."
                     st.session_state.latest_text = ""
+                    st.session_state.speed_str = "—"
+                    st.session_state.eta_str = "Calcul..."
+                    st.session_state.batch_eta_str = "Calcul..."
+                    st.session_state.batch_elapsed_str = "00:00"
+                    if "last_error" in st.session_state:
+                        del st.session_state["last_error"]
                     
                     if len(saved_paths) == 1:
                         st.session_state.is_batch = False
@@ -903,9 +1179,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                     else:
@@ -932,9 +1209,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                         
@@ -962,7 +1240,8 @@ def main():
                 st.markdown(f"**Progression globale : Fichier {current_idx} / {total_files}** ({overall_progress}%)")
                 st.progress(overall_progress)
                 
-                st.markdown(f"Fichier en cours : `{file_name}` ({file_pct}%)")
+                curr_name_disp = f"`{file_name}` ({file_pct}%)" if file_name else "*(Initialisation du lot...)*"
+                st.markdown(f"Fichier en cours : {curr_name_disp}")
                 st.progress(file_pct)
 
                 # Bandeau d'estimation dynamique en lot (Vitesse, ETA fichier, ETA lot)
@@ -980,6 +1259,7 @@ def main():
                 </div>
                 """
                 st.markdown(batch_badge_html, unsafe_allow_html=True)
+                st.markdown(f"**Statut :** `{st.session_state.get('status_label', 'En cours...')}`")
             else:
                 progress_val = int(st.session_state.get("progress_pct", 0))
                 st.progress(progress_val)
@@ -1013,7 +1293,8 @@ def main():
             status = msg.get("status")
             
             if status == "loading_model":
-                st.session_state.status_label = "Chargement du modèle en mémoire GPU..."
+                mod_name = msg.get("model", "")
+                st.session_state.status_label = f"Chargement du modèle Whisper ({mod_name}) en mémoire..." if mod_name else "Chargement du modèle Whisper en mémoire..."
             elif status == "batch_discovered":
                 st.session_state.total_batch_files = msg.get("total_files", 1)
             elif status == "info_detected":
@@ -1112,9 +1393,13 @@ def main():
                         pass
 
                 st.rerun()
+            elif status == "warning":
+                st.toast(msg.get("warning", "Avertissement"), icon="⚠️")
             elif status == "error":
                 st.session_state.is_processing = False
-                st.error(f"Erreur durant la transcription : {msg.get('error')}")
+                err_text = str(msg.get("error", "Erreur durant la transcription"))
+                st.session_state.last_error = err_text
+                st.toast(f"Erreur : {err_text}", icon="🚨")
                 st.rerun()
             elif status == "stopped":
                 st.session_state.is_processing = False
@@ -1136,7 +1421,7 @@ def main():
             </style>
             """, unsafe_allow_html=True)
             
-        time.sleep(0.3)
+        time.sleep(0.5)
         st.rerun()
 
     # =========================================================================
@@ -1357,7 +1642,8 @@ def main():
                             render_editor_tab(
                                 file_path=b_fpath,
                                 output_dir=b_out_dir,
-                                base_name=b_bname
+                                base_name=b_bname,
+                                key_prefix=f"batch_{idx}"
                             )
 
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
@@ -1489,7 +1775,8 @@ def main():
                 render_editor_tab(
                     file_path=file_path,
                     output_dir=out_dir,
-                    base_name=base_name
+                    base_name=base_name,
+                    key_prefix="single"
                 )
             
             with tab_txt:
