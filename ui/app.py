@@ -391,10 +391,21 @@ def render_history_view():
         )
     with col_action:
         if stats['total_count'] > 0:
-            if st.button("🗑️ Vider tout", type="secondary", use_container_width=True, help="Efface tout l'historique de la base locale"):
-                clear_history()
-                st.success("Historique vidé.")
-                st.rerun()
+            with st.popover("🗑️ Vider tout", use_container_width=True):
+                st.markdown("##### ⚠️ Effacer l'historique ?")
+                st.markdown(f"Cette action supprimera les **{stats['total_count']}** transcriptions enregistrées.")
+                st.caption("Les fichiers audio source sur votre disque restent préservés.")
+                if st.button("🔴 Confirmer la suppression", type="primary", use_container_width=True, key="btn_confirm_clear_history"):
+                    cleared = clear_history()
+                    # Nettoyer toutes les clés de session liées à l'historique
+                    for k in list(st.session_state.keys()):
+                        if k.startswith(("hist_", "rec_", "ed_hist_")):
+                            del st.session_state[k]
+                    if cleared:
+                        st.toast("Bibliothèque locale vidée avec succès !", icon="🗑️")
+                    else:
+                        st.toast("Erreur lors de la suppression.", icon="⚠️")
+                    st.rerun()
 
     # 3. Récupération des enregistrements
     records = get_records(query=search_query)
@@ -504,6 +515,10 @@ def render_history_view():
             with col_del:
                 if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", use_container_width=True, help="Supprimer cet enregistrement de la base"):
                     delete_record(rec_id)
+                    for k in list(st.session_state.keys()):
+                        if str(rec_id) in k:
+                            del st.session_state[k]
+                    st.toast("Transcription supprimée de l'historique !", icon="🗑️")
                     st.rerun()
 
             # Éditeur interactif & Synchronisation pour l'historique
