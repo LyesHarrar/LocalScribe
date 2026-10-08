@@ -87,7 +87,8 @@ def transcribe_file_threaded(
     target_translation: Optional[str] = None,
     preprocess_audio: bool = False,
     normalize_volume: bool = True,
-    denoise: bool = False
+    denoise: bool = False,
+    beam_size: int = 5
 ) -> None:
     """
     Transcrit un fichier unique en arrière-plan.
@@ -165,7 +166,7 @@ def transcribe_file_threaded(
         progress_queue.put({"status": "starting", "file": str(file_path)})
         
         transcribe_kwargs = {
-            "beam_size": 5,
+            "beam_size": beam_size,
             "task": task,
             "vad_filter": vad_filter
         }
@@ -490,7 +491,8 @@ def transcribe_batch_threaded(
     target_translation: Optional[str] = None,
     preprocess_audio: bool = False,
     normalize_volume: bool = True,
-    denoise: bool = False
+    denoise: bool = False,
+    beam_size: int = 5
 ) -> None:
     """
     Transcription par lot (file d'attente ou scan récursif) :
@@ -657,7 +659,7 @@ def transcribe_batch_threaded(
 
             # Inférence Whisper
             transcribe_kwargs = {
-                "beam_size": 5,
+                "beam_size": beam_size,
                 "task": task,
                 "vad_filter": vad_filter
             }

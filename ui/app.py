@@ -154,16 +154,33 @@ def render_sidebar():
         
         st.markdown("### :material/memory: Modèle Whisper")
         model_options = ["tiny", "base", "small", "medium", "large-v3"]
+        model_labels = {
+            "tiny": "⚡⚡ tiny (Ultra-rapide • ~39M params)",
+            "base": "⚡ base (Rapide • ~74M params)",
+            "small": "⚖️ small (Équilibré • ~244M params)",
+            "medium": "🎯 medium (Haute précision • ~769M params)",
+            "large-v3": "🔬 large-v3 (Qualité studio • ~1550M params)",
+        }
         default_index = model_options.index(profile.recommended_model) if profile.recommended_model in model_options else 1
         
         selected_model = st.selectbox(
             "Taille du modèle",
             options=model_options,
+            format_func=lambda m: model_labels.get(m, m),
             index=default_index,
-            help="Modèles plus grands = meilleure précision. 'medium' est idéal pour les cartes NVIDIA RTX 3060."
+            help="Modèles légers (tiny/base/small) = transcription ultra-rapide. Modèles plus grands (medium/large) = meilleure reconnaissance du jargon et grammaire."
         )
         st.session_state.selected_model = selected_model
         st.caption(f"Recommandation système : `{profile.recommended_model}`")
+
+        # Choix de la vitesse de décodage (Beam size)
+        speed_mode = st.radio(
+            "Vitesse de décodage :",
+            options=["⚡ Mode Rapide (Beam 1 • 2x plus rapide)", "🎯 Mode Précis (Beam 5 • Analyse poussée)"],
+            index=0 if selected_model in ("tiny", "base") else 1,
+            help="Le Mode Rapide (Beam 1) utilise le décodage direct (greedy) : 2 à 3 fois plus rapide. Le Mode Précis (Beam 5) explore plusieurs hypothèses en parallèle."
+        )
+        st.session_state.beam_size = 1 if "Beam 1" in speed_mode else 5
         
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("### :material/tune: Options Audio & IA")
@@ -290,16 +307,16 @@ def render_sidebar():
             )
 
         normalize_vol = st.checkbox(
-            "🔊 Normaliser le volume (Auto-Gain)",
-            value=True,
-            help="Égalise dynamiquement le volume sonore pour rehausser les voix faibles, chuchotées ou lointaines sans distorsion (filtre broadcast dynaudnorm)."
+            "🔊 Rehausser les voix faibles (Auto-Gain dynaudnorm)",
+            value=False,
+            help="Égalise dynamiquement le volume pour booster les voix chuchotées ou lointaines. Laissez désactivé pour une vitesse maximale sur des vidéos normales."
         )
         st.session_state.normalize_volume = normalize_vol
 
         denoise_audio = st.checkbox(
             "🧹 Réduire le bruit de fond (Denoising)",
             value=False,
-            help="Filtre les bruits sourds de ventilation (HVAC) et sifflements de micro via des filtres passe-bande et suppression spectrale."
+            help="Filtre les bruits sourds de ventilation (HVAC) et sifflements de micro via des filtres passe-bande et suppression spectrale. Laissez désactivé pour une vitesse maximale."
         )
         st.session_state.denoise_audio = denoise_audio
         st.session_state.preprocess_audio = normalize_vol or denoise_audio
@@ -320,6 +337,38 @@ def render_sidebar():
             help="Émet un carillon système Windows discret à la fin de la transcription."
         )
         st.session_state.enable_chime = enable_chime
+
+        # 9. Widget d'avancement épinglé dans la barre latérale en cours de traitement
+        if st.session_state.get("is_processing", False):
+            st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #3b82f6;'>", unsafe_allow_html=True)
+            st.markdown("### ⏳ Tâche en cours")
+            if st.session_state.get("is_batch", False):
+                c_idx = st.session_state.get("current_file_idx", 1)
+                t_files = st.session_state.get("total_batch_files", 1)
+                f_name = st.session_state.get("current_file_name", "")
+                f_pct = int(st.session_state.get("progress_pct", 0))
+                st.markdown(f"**Lot : Fichier {c_idx} / {t_files}**")
+                if f_name:
+                    disp_name = f"`{f_name[:22]}...`" if len(f_name) > 22 else f"`{f_name}`"
+                    st.caption(disp_name)
+                st.progress(f_pct)
+                speed = st.session_state.get("speed_str", "—")
+                eta = st.session_state.get("batch_eta_str", "Calcul...")
+                st.caption(f"⚡ Vitesse : **{speed}** • ETA lot : **{eta}**")
+            else:
+                pct = int(st.session_state.get("progress_pct", 0))
+                st.markdown("**Progression :**")
+                st.progress(pct)
+                speed = st.session_state.get("speed_str", "—")
+                eta = st.session_state.get("eta_str", "Calcul...")
+                st.caption(f"⚡ Vitesse : **{speed}** • ETA : **{eta}**")
+
+            if st.button("🛑 Interrompre", key="btn_stop_sidebar", type="secondary", use_container_width=True):
+                if "stop_event" in st.session_state and st.session_state.stop_event:
+                    st.session_state.stop_event.set()
+                st.session_state.is_processing = False
+                st.warning("Arrêt demandé...")
+                st.rerun()
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown(f"""
@@ -691,6 +740,7 @@ def main():
     import streamlit_shadcn_ui as ui
 
     # Sélecteur de Mode Segmenté moderne
+    is_busy = st.session_state.get("is_processing", False)
     mode_selection = st.segmented_control(
         "Mode de transcription",
         options=[
@@ -701,8 +751,12 @@ def main():
         default=":material/upload_file: File d'attente (Multi-Fichiers)",
         selection_mode="single",
         label_visibility="collapsed",
+        disabled=is_busy,
         key="mode_segmented_control"
     )
+    if is_busy:
+        st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
+
     if not mode_selection:
         mode_selection = ":material/upload_file: File d'attente (Multi-Fichiers)"
     is_folder_mode = "Dossier" in mode_selection
@@ -790,7 +844,7 @@ def main():
 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 if total_found > 0:
-                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", use_container_width=True):
+                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -826,9 +880,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                         add_script_run_ctx(t)
@@ -903,7 +958,7 @@ def main():
                     else f":material/rocket_launch: Lancer la file d'attente ({len(uploaded_files)} fichiers)"
                 )
                 
-                if st.button(btn_label, key="btn_launch_queue", type="primary", use_container_width=True):
+                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
                     saved_paths = [save_uploaded_file(f) for f in uploaded_files]
                     output_dir = PROJECT_ROOT / "output"
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -942,9 +997,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                     else:
@@ -971,9 +1027,10 @@ def main():
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
                                 "target_translation": st.session_state.get("target_translation_code"),
-                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
-                                "normalize_volume": st.session_state.get("normalize_volume", True),
-                                "denoise": st.session_state.get("denoise_audio", False)
+                                "preprocess_audio": st.session_state.get("preprocess_audio", False),
+                                "normalize_volume": st.session_state.get("normalize_volume", False),
+                                "denoise": st.session_state.get("denoise_audio", False),
+                                "beam_size": st.session_state.get("beam_size", 5)
                             }
                         )
                         
@@ -1182,7 +1239,7 @@ def main():
             </style>
             """, unsafe_allow_html=True)
             
-        time.sleep(0.3)
+        time.sleep(0.5)
         st.rerun()
 
     # =========================================================================

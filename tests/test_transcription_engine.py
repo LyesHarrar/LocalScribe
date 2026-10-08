@@ -1027,6 +1027,74 @@ class TestTranscriptionEngine(unittest.TestCase):
             file_comp = [m for m in messages if m.get("status") == "file_complete"]
             self.assertEqual(len(file_comp), 1)
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_custom_beam_size(self, mock_whisper_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                beam_size=1
+            )
+            
+            mock_model.transcribe.assert_called_once()
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("beam_size"), 1)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_with_custom_beam_size(self, mock_whisper_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio1.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                files=[fake_audio],
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                beam_size=1
+            )
+            
+            mock_model.transcribe.assert_called_once()
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("beam_size"), 1)
+
 if __name__ == "__main__":
     unittest.main()
 
