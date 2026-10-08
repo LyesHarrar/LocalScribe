@@ -42,6 +42,8 @@ from core.transcription_engine import (
     SUPPORTED_EXTENSIONS,
     SUPPORTED_LANGUAGES
 )
+from core.text_formatter import TranscriptionSegment, parse_srt
+from ui.editor_component import render_editor_tab
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
 
@@ -441,6 +443,31 @@ def render_history_view():
                 if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", use_container_width=True, help="Supprimer cet enregistrement de la base"):
                     delete_record(rec_id)
                     st.rerun()
+
+            # Éditeur interactif & Synchronisation pour l'historique
+            with st.expander("✏️ Éditer & Synchroniser cette transcription...", expanded=False):
+                h_file_path = Path(rec["filepath"]) if rec.get("filepath") else None
+                h_out_dir = Path(rec["txt_path"]).parent if rec.get("txt_path") else Path(".")
+                h_base_name = Path(filename).stem
+                
+                h_seg_key = f"hist_segs_{rec_id}"
+                if h_seg_key not in st.session_state:
+                    if rec.get("segments"):
+                        st.session_state[h_seg_key] = [
+                            TranscriptionSegment.from_dict(s) for s in rec["segments"]
+                        ]
+                    elif rec.get("srt_path") and Path(rec["srt_path"]).exists():
+                        st.session_state[h_seg_key] = parse_srt(Path(rec["srt_path"]).read_text(encoding="utf-8"))
+                    else:
+                        st.session_state[h_seg_key] = []
+                
+                st.session_state.result_segments = st.session_state[h_seg_key]
+                render_editor_tab(
+                    file_path=h_file_path,
+                    output_dir=h_out_dir,
+                    base_name=h_base_name,
+                    record_id=rec_id
+                )
 
             # Traduction à la demande pour l'historique
             with st.expander("🌐 Traduire cet enregistrement...", expanded=False):
@@ -868,6 +895,12 @@ def main():
                     st.session_state.translated_srt_path = msg.get("translated_srt_path", "")
                     st.session_state.translated_md_path = msg.get("translated_md_path", "")
                     st.session_state.active_target_translation = msg.get("target_translation", None)
+                    if msg.get("segments"):
+                        st.session_state.result_segments = [
+                            TranscriptionSegment.from_dict(s) for s in msg["segments"]
+                        ]
+                    else:
+                        st.session_state.result_segments = []
                     st.rerun()
             elif status == "batch_complete":
                 st.session_state.is_processing = False
@@ -1097,6 +1130,28 @@ def main():
                                         )
                                 st.text_area(f"Texte traduit ({cf_name}) :", value=tr_text, height=120, key=f"ta_btr_{idx}", disabled=True)
 
+                        # Éditeur interactif pour ce fichier du lot
+                        with st.expander(f"✏️ Éditer & Synchroniser ({cf_name})", expanded=False):
+                            b_fpath = Path(cf.get("file_path")) if cf.get("file_path") else None
+                            b_out_dir = Path(cf["txt_path"]).parent if cf.get("txt_path") else Path(".")
+                            b_bname = Path(cf_name).stem
+                            b_seg_key = f"batch_segs_{idx}"
+                            if b_seg_key not in st.session_state:
+                                if cf.get("segments"):
+                                    st.session_state[b_seg_key] = [
+                                        TranscriptionSegment.from_dict(s) for s in cf["segments"]
+                                    ]
+                                elif cf.get("srt_path") and Path(cf["srt_path"]).exists():
+                                    st.session_state[b_seg_key] = parse_srt(Path(cf["srt_path"]).read_text(encoding="utf-8"))
+                                else:
+                                    st.session_state[b_seg_key] = []
+                            st.session_state.result_segments = st.session_state[b_seg_key]
+                            render_editor_tab(
+                                file_path=b_fpath,
+                                output_dir=b_out_dir,
+                                base_name=b_bname
+                            )
+
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
             if st.button(reset_label, use_container_width=True, key="btn_reset_batch"):
@@ -1199,13 +1254,21 @@ def main():
             st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
             
             # Onglets élégants Linear / Shadcn
-            tab_txt, tab_md, tab_srt, tab_trans, tab_llm = st.tabs([
+            tab_edit, tab_txt, tab_md, tab_srt, tab_trans, tab_llm = st.tabs([
+                ":material/edit: Éditeur Audio-Texte",
                 ":material/description: Texte Brut (.txt)", 
                 ":material/markdown: Markdown (.md)", 
                 "⏱️ Sous-titres (.srt)", 
                 "🌐 Traduction Hors-Ligne",
                 "🤖 Prompts LLM"
             ])
+            
+            with tab_edit:
+                render_editor_tab(
+                    file_path=file_path,
+                    output_dir=out_dir,
+                    base_name=base_name
+                )
             
             with tab_txt:
                 col_t_dl, col_t_cp = st.columns([1, 1])

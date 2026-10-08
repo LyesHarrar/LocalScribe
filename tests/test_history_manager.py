@@ -13,7 +13,8 @@ from core.history_manager import (
     get_record_by_id,
     delete_record,
     clear_history,
-    get_history_stats
+    get_history_stats,
+    update_record
 )
 
 
@@ -126,6 +127,43 @@ class TestHistoryManager(unittest.TestCase):
         self.assertEqual(stats["total_duration_hours"], 1.5)
         self.assertEqual(stats["distinct_languages"], 2)
 
+    def test_update_record_and_segments(self):
+        """Vérifie la mise à jour dynamique et la gestion des segments de transcription."""
+        initial_segments = [
+            {"start": 0.0, "end": 2.5, "text": "Bonjour tout le monde.", "speaker": "Locuteur 1"},
+            {"start": 2.5, "end": 5.0, "text": "Bienvenue sur LocalScribe.", "speaker": "Locuteur 2"}
+        ]
+        r_id = add_record({
+            "filename": "podcast.mp3",
+            "transcript_text": "Texte initial",
+            "segments": initial_segments,
+            "speakers": ["Locuteur 1", "Locuteur 2"]
+        }, db_path=self.db_path)
+
+        rec = get_record_by_id(r_id, db_path=self.db_path)
+        self.assertEqual(len(rec["segments"]), 2)
+        self.assertEqual(rec["segments"][0]["speaker"], "Locuteur 1")
+
+        # Mise à jour avec nouveaux segments et locuteurs renommés
+        updated_segments = [
+            {"start": 0.0, "end": 2.5, "text": "Bonjour à tous.", "speaker": "Alice"},
+            {"start": 2.5, "end": 5.0, "text": "Bienvenue sur LocalScribe v1.8.", "speaker": "Bob"}
+        ]
+        ok = update_record(r_id, {
+            "transcript_text": "Bonjour à tous.\nBienvenue sur LocalScribe v1.8.",
+            "speakers": ["Alice", "Bob"],
+            "segments": updated_segments
+        }, db_path=self.db_path)
+        self.assertTrue(ok)
+
+        rec_after = get_record_by_id(r_id, db_path=self.db_path)
+        self.assertEqual(rec_after["speakers"], ["Alice", "Bob"])
+        self.assertIn("v1.8", rec_after["transcript_text"])
+        self.assertEqual(len(rec_after["segments"]), 2)
+        self.assertEqual(rec_after["segments"][0]["speaker"], "Alice")
+        self.assertEqual(rec_after["segments"][0]["text"], "Bonjour à tous.")
+
 
 if __name__ == "__main__":
     unittest.main()
+

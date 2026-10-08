@@ -259,6 +259,17 @@ def transcribe_file_threaded(
                     "warning": f"Traduction impossible : {t_err}"
                 })
 
+        serialized_segments = [
+            {
+                "id": i,
+                "start": round(getattr(s, "start", 0.0), 3),
+                "end": round(getattr(s, "end", 0.0), 3),
+                "text": getattr(s, "text", "").strip(),
+                "speaker": getattr(s, "speaker", None)
+            }
+            for i, s in enumerate(segments, start=1)
+        ]
+
         # Enregistrement automatique dans l'historique SQLite
         try:
             from core.history_manager import add_record
@@ -272,6 +283,7 @@ def transcribe_file_threaded(
                 "model": model_to_use,
                 "speakers": detected_speakers if detected_speakers else None,
                 "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else "",
+                "segments": serialized_segments,
                 "txt_path": str(out_txt),
                 "md_path": str(out_md),
                 "srt_path": str(out_srt)
@@ -287,6 +299,7 @@ def transcribe_file_threaded(
             "language_probability": lang_prob,
             "task": task,
             "speakers": detected_speakers,
+            "segments": serialized_segments,
             "target_translation": target_translation,
             "translated_txt_path": translated_txt_path,
             "translated_srt_path": translated_srt_path,
@@ -577,6 +590,17 @@ def transcribe_batch_threaded(
                 except Exception as t_err:
                     logger.warning(f"Erreur lors de la traduction du fichier batch {file_path.name}: {t_err}")
 
+            serialized_segments = [
+                {
+                    "id": i,
+                    "start": round(getattr(s, "start", 0.0), 3),
+                    "end": round(getattr(s, "end", 0.0), 3),
+                    "text": getattr(s, "text", "").strip(),
+                    "speaker": getattr(s, "speaker", None)
+                }
+                for i, s in enumerate(segments, start=1)
+            ]
+
             # Enregistrement automatique dans l'historique SQLite
             try:
                 from core.history_manager import add_record
@@ -590,6 +614,7 @@ def transcribe_batch_threaded(
                     "model": model_to_use,
                     "speakers": detected_speakers if detected_speakers else None,
                     "transcript_text": txt_text_content,
+                    "segments": serialized_segments,
                     "txt_path": str(out_txt),
                     "md_path": str(out_md) if export_md else "",
                     "srt_path": str(out_srt) if export_srt else ""
@@ -605,6 +630,7 @@ def transcribe_batch_threaded(
                 "language": detected_lang,
                 "language_probability": lang_prob,
                 "speakers": detected_speakers,
+                "segments": serialized_segments,
                 "txt_path": str(out_txt),
                 "srt_path": str(out_srt) if export_srt else "",
                 "md_path": str(out_md) if export_md else "",
@@ -627,6 +653,7 @@ def transcribe_batch_threaded(
                 "current_idx": idx,
                 "total_files": total_files,
                 "speakers": detected_speakers,
+                "segments": serialized_segments,
                 "duration": duration,
                 "language": detected_lang,
                 "language_probability": lang_prob,

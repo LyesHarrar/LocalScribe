@@ -4,7 +4,138 @@ Génère les sorties SRT, TXT et Markdown (avec YAML Front-matter et support Dia
 """
 
 from datetime import datetime
+import re
+from dataclasses import dataclass
 from typing import List, Any, Dict, Optional
+
+
+@dataclass
+class TranscriptionSegment:
+    """Représente un segment temporel de transcription éditable."""
+    start: float
+    end: float
+    text: str
+    speaker: Optional[str] = None
+    id: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convertit le segment en dictionnaire standard."""
+        d = {
+            "start": round(self.start, 3),
+            "end": round(self.end, 3),
+            "text": self.text.strip(),
+            "speaker": self.speaker
+        }
+        if self.id is not None:
+            d["id"] = self.id
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TranscriptionSegment":
+        """Instancie un segment depuis un dictionnaire."""
+        return cls(
+            start=float(data.get("start", 0.0)),
+            end=float(data.get("end", 0.0)),
+            text=str(data.get("text", "")),
+            speaker=data.get("speaker") or None,
+            id=data.get("id")
+        )
+
+
+def parse_timestamp(timestamp_str: str) -> float:
+    """
+    Convertit un horodatage SRT (HH:MM:SS,mmm ou HH:MM:SS.mmm ou MM:SS) en secondes.
+    Retourne 0.0 en cas de format invalide.
+    """
+    if not timestamp_str or not isinstance(timestamp_str, str):
+        return 0.0
+    
+    clean_ts = timestamp_str.strip().replace(",", ".")
+    try:
+        # Cas nombre direct (ex: "12.34")
+        if clean_ts.replace(".", "", 1).isdigit():
+            return float(clean_ts)
+
+        parts = clean_ts.split(":")
+        if len(parts) == 3:
+            h, m, s = parts
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        elif len(parts) == 2:
+            m, s = parts
+            return int(m) * 60 + float(s)
+        elif len(parts) == 1:
+            return float(parts[0])
+    except Exception:
+        pass
+    return 0.0
+
+
+def parse_srt(srt_content: str) -> List[TranscriptionSegment]:
+    """
+    Parse un contenu SRT brut en une liste d'objets TranscriptionSegment.
+    Extrait automatiquement le début, la fin, le texte et le locuteur si présent ([Nom] ou Nom:).
+    """
+    if not srt_content or not srt_content.strip():
+        return []
+
+    # Normalisation des sauts de ligne
+    normalized = srt_content.replace("\r\n", "\n").replace("\r", "\n").strip()
+    blocks = re.split(r"\n\s*\n", normalized)
+    segments: List[TranscriptionSegment] = []
+
+    timecode_pattern = re.compile(
+        r"(\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3}|\d{1,2}:\d{2}[,\.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,\.]\d{1,3}|\d{1,2}:\d{2}[,\.]\d{1,3})"
+    )
+    speaker_bracket_pattern = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
+    speaker_colon_pattern = re.compile(r"^([A-Za-zÀ-ÿ0-9_\- ]{1,25})\s*:\s*(.*)$", re.DOTALL)
+
+    for idx, block in enumerate(blocks, start=1):
+        lines = [line.strip() for line in block.split("\n") if line.strip()]
+        if not lines:
+            continue
+
+        time_line_idx = -1
+        match = None
+        for i, line in enumerate(lines):
+            match = timecode_pattern.search(line)
+            if match:
+                time_line_idx = i
+                break
+
+        if not match or time_line_idx == -1:
+            continue
+
+        start_sec = parse_timestamp(match.group(1))
+        end_sec = parse_timestamp(match.group(2))
+        text_lines = lines[time_line_idx + 1:]
+        raw_text = " ".join(text_lines).strip()
+
+        speaker = None
+        clean_text = raw_text
+
+        # Extraction du locuteur : [Nom] Texte ou Nom: Texte
+        bracket_match = speaker_bracket_pattern.match(raw_text)
+        if bracket_match:
+            speaker = bracket_match.group(1).strip()
+            clean_text = bracket_match.group(2).strip()
+        else:
+            colon_match = speaker_colon_pattern.match(raw_text)
+            if colon_match and not colon_match.group(1).strip().startswith("http"):
+                candidate_spk = colon_match.group(1).strip()
+                # Exclure les faux positifs d'heures ou de listes
+                if not candidate_spk.isdigit():
+                    speaker = candidate_spk
+                    clean_text = colon_match.group(2).strip()
+
+        segments.append(TranscriptionSegment(
+            start=start_sec,
+            end=end_sec,
+            text=clean_text,
+            speaker=speaker,
+            id=idx
+        ))
+
+    return segments
 
 
 def format_timestamp(seconds: float) -> str:

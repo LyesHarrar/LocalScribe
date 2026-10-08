@@ -48,6 +48,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 model TEXT DEFAULT 'medium',
                 speakers TEXT,
                 transcript_text TEXT,
+                segments TEXT,
                 txt_path TEXT,
                 md_path TEXT,
                 srt_path TEXT
@@ -55,6 +56,12 @@ def init_db(db_path: Optional[Path] = None) -> None:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_transcriptions_created ON transcriptions(created_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_transcriptions_filename ON transcriptions(filename)")
+
+            # Migration progressive si la table existait déjà sans la colonne 'segments'
+            cursor = conn.execute("PRAGMA table_info(transcriptions)")
+            cols = [col[1] for col in cursor.fetchall()]
+            if "segments" not in cols:
+                conn.execute("ALTER TABLE transcriptions ADD COLUMN segments TEXT")
     finally:
         conn.close()
 
@@ -75,6 +82,14 @@ def add_record(entry: Dict[str, Any], db_path: Optional[Path] = None) -> int:
     else:
         speakers_json = None
 
+    segments_val = entry.get("segments")
+    if isinstance(segments_val, list):
+        segments_json = json.dumps(segments_val, ensure_ascii=False)
+    elif isinstance(segments_val, str):
+        segments_json = segments_val
+    else:
+        segments_json = None
+
     created_at = entry.get("created_at") or datetime.now().isoformat()
     
     try:
@@ -83,8 +98,8 @@ def add_record(entry: Dict[str, Any], db_path: Optional[Path] = None) -> int:
             INSERT INTO transcriptions (
                 created_at, filename, filepath, duration,
                 language, language_probability, task, model,
-                speakers, transcript_text, txt_path, md_path, srt_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                speakers, transcript_text, segments, txt_path, md_path, srt_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 created_at,
                 entry.get("filename", "Sans titre"),
@@ -96,6 +111,7 @@ def add_record(entry: Dict[str, Any], db_path: Optional[Path] = None) -> int:
                 entry.get("model", "medium"),
                 speakers_json,
                 entry.get("transcript_text", ""),
+                segments_json,
                 str(entry.get("txt_path", "")),
                 str(entry.get("md_path", "")),
                 str(entry.get("srt_path", ""))
@@ -103,6 +119,54 @@ def add_record(entry: Dict[str, Any], db_path: Optional[Path] = None) -> int:
             record_id = cursor.lastrowid
             logger.info(f"Transcription enregistrée dans l'historique (ID: {record_id}, fichier: {entry.get('filename')})")
             return record_id
+    finally:
+        conn.close()
+
+
+def update_record(record_id: int, updates: Dict[str, Any], db_path: Optional[Path] = None) -> bool:
+    """
+    Met à jour un enregistrement existant dans l'historique SQLite.
+    Gère la sérialisation JSON automatique pour 'speakers' et 'segments'.
+    """
+    init_db(db_path)
+    if not updates:
+        return False
+
+    valid_cols = {
+        "filename", "filepath", "duration", "language", "language_probability",
+        "task", "model", "speakers", "transcript_text", "segments",
+        "txt_path", "md_path", "srt_path"
+    }
+
+    set_clauses = []
+    values = []
+
+    for key, val in updates.items():
+        if key not in valid_cols:
+            continue
+
+        if key in ("speakers", "segments") and isinstance(val, (list, dict)):
+            val = json.dumps(val, ensure_ascii=False)
+        elif key in ("duration", "language_probability") and val is not None:
+            val = float(val)
+
+        set_clauses.append(f"{key} = ?")
+        values.append(val)
+
+    if not set_clauses:
+        return False
+
+    values.append(record_id)
+    sql = f"UPDATE transcriptions SET {', '.join(set_clauses)} WHERE id = ?"
+
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            cursor = conn.execute(sql, tuple(values))
+            success = cursor.rowcount > 0
+            if success:
+                logger.info(f"Transcription ID {record_id} mise à jour avec succès dans l'historique.")
+            return success
     finally:
         conn.close()
 
@@ -117,6 +181,15 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
             pass
     else:
         data["speakers"] = []
+
+    if data.get("segments"):
+        try:
+            data["segments"] = json.loads(data["segments"])
+        except Exception:
+            pass
+    else:
+        data["segments"] = []
+
     return data
 
 
