@@ -52,6 +52,7 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.1 — Fonctionnalités Audio Avancées** : *Implémentée (traduction anglaise directe, sélection 99 langues, filtre VAD Silero, prompt/vocabulaire, métriques de confiance).*
 - [x] **Version 1.2 — Diarisation des Locuteurs (Speaker Diarization)** : *Implémentée et validée (sherpa-onnx 100% hors-ligne & zéro token, segmentation PyAnnote ONNX + embedding CAM++, alignement Whisper, renommage interactif des locuteurs, 32/32 tests au vert).*
 - [x] **Version 1.3 — Historique Persistant & Recherche (SQLite)** : *Implémentée et validée (persistance automatique mono/batch, recherche textuelle plein champ, consultation et téléchargements rétroactifs, suppression/nettoyage, 36/36 tests au vert).*
+- [x] **Version 1.4 — Distribution Portable Zéro Dépendance** : *Implémentée et validée (pipeline de packaging desktop/package_portable.py, CPython autonome embarqué sans installation requise, bootstrap launcher LocalScribe.exe ultra-léger avec fallback WebView2/navigateur et boîtes d'alerte natives ctypes, 46/46 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.3 mergée avec succès sur main.*
+*Dernière mise à jour par l'Agent : Version 1.4 prête pour fusion (PR).*

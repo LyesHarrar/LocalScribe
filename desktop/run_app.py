@@ -50,17 +50,24 @@ def get_project_root() -> Path:
 def get_python_executable() -> str:
     """
     Localise l'interpréteur Python approprié pour exécuter le serveur Streamlit.
-    1. Vérifie la présence d'un Python portable dans /python/python.exe (distribution ZIP).
+    1. Vérifie la présence d'un Python portable dans /python/ (distribution ZIP).
     2. En mode développement classique, utilise le sys.executable courant.
     3. En mode binaire PyInstaller, cherche 'python.exe' sur le système.
     """
     root = get_project_root()
     
     # 1. Python portable embarqué (priorité absolue)
-    portable_python = root / "python" / ("python.exe" if sys.platform == "win32" else "bin/python3")
-    if portable_python.exists():
-        logger.info(f"Utilisation du Python portable : {portable_python}")
-        return str(portable_python.resolve())
+    if sys.platform == "win32":
+        for cand_name in ("python.exe", "pythonw.exe"):
+            portable_python = root / "python" / cand_name
+            if portable_python.is_file():
+                logger.info(f"Utilisation du Python portable : {portable_python}")
+                return str(portable_python.resolve())
+    else:
+        portable_python = root / "python" / "bin" / "python3"
+        if portable_python.is_file():
+            logger.info(f"Utilisation du Python portable : {portable_python}")
+            return str(portable_python.resolve())
         
     # 2. Mode développement (script python direct)
     if not getattr(sys, "frozen", False):
@@ -77,10 +84,11 @@ def get_python_executable() -> str:
         candidates = [
             Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python",
             Path(os.environ.get("ProgramFiles", "")) / "Python",
+            Path(os.environ.get("ProgramFiles(x86)", "")) / "Python",
         ]
         for base in candidates:
             if base.exists():
-                for p in base.glob("Python*/python.exe"):
+                for p in sorted(base.glob("Python*/python.exe"), reverse=True):
                     if p.exists():
                         logger.info(f"Python trouvé dans les dossiers standards : {p}")
                         return str(p.resolve())
@@ -104,7 +112,7 @@ _server_process: Optional[subprocess.Popen] = None
 def check_webview_dependencies() -> bool:
     """
     Vérifie la présence des dépendances natives (Edge WebView2 sur Windows).
-    Affiche une boîte de dialogue explicative en cas d'absence.
+    Retourne True si WebView2 est opérationnel, False s'il est absent.
     """
     if sys.platform == "win32":
         try:
@@ -117,7 +125,7 @@ def check_webview_dependencies() -> bool:
             return True
             
         except Exception as e:
-            logger.error(f"Composant manquant ou erreur WebView2 : {e}")
+            logger.warning(f"Composant manquant ou erreur WebView2 : {e}")
             try:
                 import tkinter as tk
                 from tkinter import messagebox
@@ -127,14 +135,15 @@ def check_webview_dependencies() -> bool:
                 root.attributes("-topmost", True)
                 
                 answer = messagebox.askyesno(
-                    "Composant Requis — LocalScribe",
-                    "LocalScribe nécessite le composant système 'Microsoft Edge WebView2' pour afficher l'interface native.\n\n"
-                    "Souhaitez-vous ouvrir la page officielle de Microsoft pour le télécharger gratuitement ?"
+                    "Composant Optionnel — LocalScribe",
+                    "LocalScribe fonctionne de manière optimale avec 'Microsoft Edge WebView2'.\n\n"
+                    "Ce composant n'a pas été détecté. LocalScribe s'ouvrira dans votre navigateur par défaut.\n\n"
+                    "Souhaitez-vous télécharger le composant officiel pour obtenir la fenêtre native ?"
                 )
                 if answer:
                     webbrowser.open("https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section")
             except Exception as tk_err:
-                logger.error(f"Erreur lors de l'affichage du dialogue Tkinter : {tk_err}")
+                logger.debug(f"Erreur lors de l'affichage du dialogue Tkinter : {tk_err}")
                 
             return False
             
@@ -287,15 +296,18 @@ atexit.register(cleanup_server)
 def launch_desktop():
     """
     Point d'entrée principal pour l'application de bureau native.
+    Si WebView2 est disponible, ouvre une fenêtre native pywebview.
+    Sinon (ou en cas d'erreur de la fenêtre), bascule automatiquement
+    vers le navigateur web par défaut.
     """
     _setup_file_logging()
     root = get_project_root()
     logger.info(f"Démarrage de LocalScribe (Root: {root})...")
     
-    # 1. Vérification des dépendances
-    if not check_webview_dependencies():
-        logger.error("Prérequis non satisfaits. Fermeture de l'application.")
-        sys.exit(1)
+    # 1. Vérification des dépendances natives
+    has_webview = check_webview_dependencies()
+    if not has_webview:
+        logger.info("WebView2 non disponible : activation du mode navigateur web par défaut.")
         
     # 2. Gestion des signaux d'interruption
     def signal_handler(sig, frame):
@@ -323,34 +335,48 @@ def launch_desktop():
             f"Consultez '{log_path.name}' pour analyser l'erreur."
         )
         
-    # 7. Création de la fenêtre native pywebview
-    import webview
-    
     target_url = f"http://127.0.0.1:{port}"
-    logger.info(f"Ouverture de la fenêtre native sur {target_url}...")
     
-    window = webview.create_window(
-        title="LocalScribe — Studio de Transcription IA Local",
-        url=target_url,
-        width=1320,
-        height=880,
-        min_size=(960, 640),
-        background_color="#05070e",
-        text_select=True,
-        zoomable=True
-    )
-    
-    # 8. Événement de fermeture de la fenêtre
-    def on_closed():
-        logger.info("Fermeture de la fenêtre native détectée.")
-        cleanup_server(process)
-        
-    window.events.closed += on_closed
-    
-    # 9. Démarrage de la boucle d'événements native
+    # 7. Tentative d'ouverture de la fenêtre native pywebview si disponible
+    if has_webview:
+        try:
+            import webview
+            logger.info(f"Ouverture de la fenêtre native sur {target_url}...")
+            
+            window = webview.create_window(
+                title="LocalScribe — Studio de Transcription IA Local",
+                url=target_url,
+                width=1320,
+                height=880,
+                min_size=(960, 640),
+                background_color="#05070e",
+                text_select=True,
+                zoomable=True
+            )
+            
+            def on_closed():
+                logger.info("Fermeture de la fenêtre native détectée.")
+                cleanup_server(process)
+                
+            window.events.closed += on_closed
+            
+            gui_backend = "edgechromium" if sys.platform == "win32" else None
+            webview.start(gui=gui_backend, debug=False)
+            return
+        except Exception as e:
+            logger.warning(
+                f"Échec du démarrage de la fenêtre native pywebview ({e}). "
+                "Basculement automatique sur le navigateur par défaut..."
+            )
+            
+    # 8. Mode Fallback : Navigateur Web par défaut
+    logger.info(f"Ouverture de LocalScribe dans le navigateur web par défaut : {target_url}")
+    webbrowser.open(target_url)
     try:
-        gui_backend = "edgechromium" if sys.platform == "win32" else None
-        webview.start(gui=gui_backend, debug=False)
+        while process.poll() is None:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Arrêt du superviseur demandé.")
     finally:
         cleanup_server(process)
 
