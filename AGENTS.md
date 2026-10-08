@@ -58,4 +58,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.7 — Traduction Multilingue 100% Hors-Ligne (NLLB-200 / CTranslate2)** : *Implémentée et validée (traduction neuronale multilingue 24 langues via Meta NLLB-200 INT8 & CTranslate2, zéro réseau, préservation des balises locuteurs et des timecodes SRT, intégration batch & mono-fichier, onglet dédié UI avec copie 1-clic et téléchargements TXT/SRT/MD, intégration historique SQLite, 63/63 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.7 implémentée et validée (63/63 tests au vert).*
+*Dernière mise à jour par l'Agent : Version 1.7 mergée avec succès sur main (63/63 tests au vert).*
