@@ -450,7 +450,9 @@ def render_sidebar():
             st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             st.markdown("##### ⚡ Prétraitement Acoustique")
             
-            ffmpeg_ok = is_ffmpeg_available()
+            if "ffmpeg_available" not in st.session_state:
+                st.session_state.ffmpeg_available = is_ffmpeg_available()
+            ffmpeg_ok = st.session_state.ffmpeg_available
             if ffmpeg_ok:
                 st.markdown(
                     render_badge("⚡ FFmpeg Détecté", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
@@ -983,36 +985,61 @@ def main():
                     value=st.session_state.target_folder,
                     placeholder=r"Exemple : C:\Users\Nom\Vidéos\Formations"
                 )
-                if target_input:
+                if target_input and target_input != st.session_state.target_folder:
                     st.session_state.target_folder = target_input
+                    st.session_state.force_folder_rescan = True
             with col_btn:
                 st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
                 if st.button(":material/folder_open: Parcourir", use_container_width=True):
                     picked = select_folder_dialog()
-                    if picked:
+                    if picked and picked != st.session_state.target_folder:
                         st.session_state.target_folder = picked
+                        st.session_state.force_folder_rescan = True
                         st.rerun()
 
-            # Analyse dynamique du dossier
+            # Analyse dynamique du dossier (avec mise en cache pour éliminer tout lag au clic)
             current_folder = Path(st.session_state.target_folder).resolve() if st.session_state.target_folder else None
             if current_folder and current_folder.exists() and current_folder.is_dir():
-                found_files = [
-                    f for f in current_folder.rglob("*")
-                    if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-                    and not f.name.startswith("ls_opt_")
-                ]
-                total_found = len(found_files)
-                already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
-                remaining = total_found - already_done
+                folder_str = str(current_folder)
+                needs_rescan = (
+                    "cached_folder_path" not in st.session_state or
+                    st.session_state.cached_folder_path != folder_str or
+                    st.session_state.get("force_folder_rescan", False)
+                )
+                if needs_rescan:
+                    found_files = [
+                        f for f in current_folder.rglob("*")
+                        if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+                        and not f.name.startswith("ls_opt_")
+                    ]
+                    total_found = len(found_files)
+                    already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
+                    remaining = total_found - already_done
+                    st.session_state.cached_folder_path = folder_str
+                    st.session_state.cached_found_files = found_files
+                    st.session_state.cached_total_found = total_found
+                    st.session_state.cached_already_done = already_done
+                    st.session_state.cached_remaining = remaining
+                    st.session_state.force_folder_rescan = False
+                else:
+                    found_files = st.session_state.cached_found_files
+                    total_found = st.session_state.cached_total_found
+                    already_done = st.session_state.cached_already_done
+                    remaining = st.session_state.cached_remaining
                 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-                col_m1, col_m2, col_m3 = st.columns(3)
+                col_m1, col_m2, col_m3, col_m_ref = st.columns([2.5, 2.5, 2.5, 1.2], vertical_alignment="center")
                 with col_m1:
                     ui.metric_card(label="Vidéos Détectées", value=str(total_found), description="Dans l'arborescence complète")
                 with col_m2:
                     ui.metric_card(label="Déjà Transcrites", value=str(already_done), description="Ignorées (Smart Resume)")
                 with col_m3:
                     ui.metric_card(label="Restantes à Traiter", value=str(remaining), description="À convertir par Whisper")
+                with col_m_ref:
+                    st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
+                    if st.button("🔄 Actualiser", key="btn_refresh_folder_scan", use_container_width=True, help="Rescanner le dossier en cas d'ajout de nouveaux fichiers"):
+                        st.session_state.force_folder_rescan = True
+                        st.rerun()
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
                 st.markdown("##### :material/settings: Options de sortie :")
@@ -1654,6 +1681,7 @@ def main():
                 st.session_state.latest_text = ""
                 st.session_state.is_batch = False
                 st.session_state.is_queue_batch = False
+                st.session_state.force_folder_rescan = True
                 st.rerun()
         else:
             st.success(":material/celebration: Transcription terminée avec succès !")
@@ -1961,6 +1989,7 @@ def main():
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""
+                st.session_state.force_folder_rescan = True
                 st.rerun()
 
 if __name__ == "__main__":

@@ -77,13 +77,20 @@ def send_windows_toast(
     """
 
     try:
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            kwargs["startupinfo"] = si
+
         res = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
             capture_output=True,
             text=True,
             timeout=timeout,
-            creationflags=creation_flags
+            **kwargs
         )
         if res.returncode == 0:
             logger.info(f"Notification Windows Toast envoyée : {title}")
