@@ -199,6 +199,9 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
         
     # Configurer l'environnement d'exécution
     env = os.environ.copy()
+    bin_dir = root / "bin"
+    if bin_dir.is_dir():
+        env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
     env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
     
     # Redirection des flux

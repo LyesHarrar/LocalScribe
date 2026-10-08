@@ -1,0 +1,271 @@
+================================================================================
+                    LOCALSCRIBE — THIRD-PARTY SOFTWARE LICENSES
+================================================================================
+
+This document provides copyright notices, licenses, and acknowledgments for
+third-party open-source software, models, and tools bundled with or utilized
+by the LocalScribe distribution.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. LocalScribe Application (MIT License)
+2. FFmpeg (LGPL / GPL)
+3. faster-whisper (MIT License)
+4. CTranslate2 (MIT License)
+5. OpenAI Whisper (MIT License)
+6. sherpa-onnx (Apache 2.0)
+7. PyAnnote ONNX & CAM++ Speaker Diarization Models (MIT / Apache 2.0)
+8. NLLB-200 Machine Translation (Meta AI / CC-BY-NC 4.0 / MIT)
+9. Streamlit (Apache 2.0)
+10. pywebview (BSD 3-Clause)
+11. pyperclip (BSD 3-Clause)
+12. Pillow (Historical Permission Notice and Disclaimer / MIT equivalent)
+13. Requests (Apache 2.0)
+14. Python / CPython Runtime (Python Software Foundation License)
+
+
+================================================================================
+1. LocalScribe Application
+================================================================================
+License: MIT License
+Copyright (c) 2026 LocalScribe Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+2. FFmpeg
+================================================================================
+Website: https://ffmpeg.org
+Binary source: https://www.gyan.dev/ffmpeg/builds/
+License: GNU General Public License v3.0 / GNU Lesser General Public License v2.1+
+Copyright (c) 2000-2024 the FFmpeg developers
+
+FFmpeg is an open-source multimedia framework licensed under the GNU Lesser
+General Public License (LGPL) version 2.1 or later, or GNU General Public License
+(GPL) version 2 or later depending on build configuration.
+LocalScribe invokes the FFmpeg standalone binary as a separate, isolated external
+process via standard command-line interfaces (CLI) for audio extraction, loudness
+normalization, and spectral filtering. LocalScribe is not statically or dynamically
+linked to FFmpeg libraries.
+
+FFmpeg source code is freely available at: https://ffmpeg.org/download.html
+
+
+================================================================================
+3. faster-whisper
+================================================================================
+Website: https://github.com/SYSTRAN/faster-whisper
+License: MIT License
+Copyright (c) 2023 Guillaume Klein, SYSTRAN Technologies
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+4. CTranslate2
+================================================================================
+Website: https://github.com/OpenNMT/CTranslate2
+License: MIT License
+Copyright (c) 2019-2023 OpenNMT / Guillaume Klein
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+5. OpenAI Whisper
+================================================================================
+Website: https://github.com/openai/whisper
+License: MIT License
+Copyright (c) 2022 OpenAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+6. sherpa-onnx
+================================================================================
+Website: https://github.com/k2-fsa/sherpa-onnx
+License: Apache License, Version 2.0
+Copyright (c) 2023 Fangjun Kuang and sherpa-onnx contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+================================================================================
+7. PyAnnote ONNX & CAM++ Speaker Diarization Models
+================================================================================
+Websites:
+- PyAnnote: https://github.com/pyannote/pyannote-audio
+- CAM++ (3D-Speaker): https://github.com/alibaba-damo-academy/3D-Speaker
+Licenses:
+- PyAnnote: MIT License, Copyright (c) 2019-2023 Hervé Bredin, CNRS
+- CAM++ (3D-Speaker): Apache License 2.0, Copyright (c) 2023 Alibaba Group
+
+
+================================================================================
+8. NLLB-200 (No Language Left Behind)
+================================================================================
+Website: https://github.com/facebookresearch/fairseq/tree/nllb
+License: Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0)
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+
+================================================================================
+9. Streamlit
+================================================================================
+Website: https://streamlit.io / https://github.com/streamlit/streamlit
+License: Apache License, Version 2.0
+Copyright (c) 2018-2024 Snowflake Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+
+================================================================================
+10. pywebview
+================================================================================
+Website: https://pywebview.flowrl.com / https://github.com/r0x0r/pywebview
+License: BSD 3-Clause License
+Copyright (c) 2014-2024 Roman Sakno
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+
+================================================================================
+11. pyperclip
+================================================================================
+Website: https://github.com/asweigart/pyperclip
+License: BSD 3-Clause License
+Copyright (c) 2014 Al Sweigart
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+
+================================================================================
+12. Pillow (PIL Fork)
+================================================================================
+Website: https://python-pillow.org / https://github.com/python-pillow/Pillow
+License: Historical Permission Notice and Disclaimer (HPND)
+Copyright (c) 2010-2024 Alex Clark and contributors
+Copyright (c) 1997-2011 by Secret Labs AB
+Copyright (c) 1995-2011 by Fredrik Lundh
+
+
+================================================================================
+13. Requests
+================================================================================
+Website: https://requests.readthedocs.io / https://github.com/psf/requests
+License: Apache License, Version 2.0
+Copyright (c) 2019 Kenneth Reitz
+
+
+================================================================================
+14. Python / CPython Runtime
+================================================================================
+Website: https://www.python.org
+License: Python Software Foundation License Version 2
+Copyright (c) 2001-2024 Python Software Foundation; All Rights Reserved
+================================================================================

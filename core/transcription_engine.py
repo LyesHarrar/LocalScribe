@@ -26,6 +26,19 @@ try:
 except Exception:
     pass
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_local_bin = PROJECT_ROOT / "bin"
+if _local_bin.is_dir():
+    os.environ["PATH"] = str(_local_bin) + os.pathsep + os.environ.get("PATH", "")
+
+
+def get_models_dir() -> Path:
+    """Retourne le répertoire local des modèles IA de LocalScribe."""
+    m_dir = PROJECT_ROOT / "models"
+    m_dir.mkdir(parents=True, exist_ok=True)
+    return m_dir
+
+
 SUPPORTED_EXTENSIONS: Set[str] = {
     ".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v",
     ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"
@@ -118,7 +131,8 @@ def transcribe_file_threaded(
         model = WhisperModel(
             model_to_use, 
             device=profile.device, 
-            compute_type=profile.compute_type
+            compute_type=profile.compute_type,
+            download_root=str(get_models_dir())
         )
         
         progress_queue.put({"status": "starting", "file": str(file_path)})
@@ -441,7 +455,8 @@ def transcribe_batch_threaded(
         model = WhisperModel(
             model_to_use, 
             device=device, 
-            compute_type=compute_type
+            compute_type=compute_type,
+            download_root=str(get_models_dir())
         )
 
         processed_count = 0

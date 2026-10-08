@@ -16,4 +16,5 @@ dist/
 *.exe
 data/
 *.db
-
+models/*
+!models/.gitkeep
