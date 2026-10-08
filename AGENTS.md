@@ -52,4 +52,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.1 — Fonctionnalités Audio Avancées** : *Implémentée (traduction anglaise directe, sélection 99 langues, filtre VAD Silero, prompt/vocabulaire, métriques de confiance).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.1 terminée sur feature/v1.1-advanced-audio-features.*
+*Dernière mise à jour par l'Agent : Version 1.1 mergée avec succès sur main.*
