@@ -44,6 +44,8 @@ from core.transcription_engine import (
 )
 from core.text_formatter import TranscriptionSegment, parse_srt
 from core.audio_preprocessor import is_ffmpeg_available
+from core.eta_calculator import format_friendly_duration
+from core.notifications import notify_transcription_complete, notify_batch_complete
 from ui.editor_component import render_editor_tab
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
@@ -294,6 +296,23 @@ def render_sidebar():
         )
         st.session_state.denoise_audio = denoise_audio
         st.session_state.preprocess_audio = normalize_vol or denoise_audio
+
+        # 8. Notifications & Alertes Bureau
+        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("##### 🔔 Notifications & Alertes")
+        enable_notif = st.checkbox(
+            "🔔 Notification bureau (Toast Windows)",
+            value=True,
+            help="Affiche une notification native dans le centre de notifications Windows à la fin du traitement."
+        )
+        st.session_state.enable_notifications = enable_notif
+
+        enable_chime = st.checkbox(
+            "🔊 Alerte sonore discrète",
+            value=True,
+            help="Émet un carillon système Windows discret à la fin de la transcription."
+        )
+        st.session_state.enable_chime = enable_chime
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
@@ -582,6 +601,16 @@ def main():
         st.session_state.latest_text = ""
     if "batch_stats" not in st.session_state:
         st.session_state.batch_stats = {}
+    if "speed_str" not in st.session_state:
+        st.session_state.speed_str = "—"
+    if "eta_str" not in st.session_state:
+        st.session_state.eta_str = "Calcul..."
+    if "elapsed_str" not in st.session_state:
+        st.session_state.elapsed_str = "00:00"
+    if "batch_eta_str" not in st.session_state:
+        st.session_state.batch_eta_str = "Calcul..."
+    if "batch_elapsed_str" not in st.session_state:
+        st.session_state.batch_elapsed_str = "00:00"
 
     import streamlit_shadcn_ui as ui
 
@@ -875,9 +904,39 @@ def main():
                 
                 st.markdown(f"Fichier en cours : `{file_name}` ({file_pct}%)")
                 st.progress(file_pct)
+
+                # Bandeau d'estimation dynamique en lot (Vitesse, ETA fichier, ETA lot)
+                speed_txt = st.session_state.get("speed_str", "—")
+                file_eta_txt = st.session_state.get("eta_str", "Calcul...")
+                batch_eta_txt = st.session_state.get("batch_eta_str", "Calcul...")
+                batch_elapsed_txt = st.session_state.get("batch_elapsed_str", "00:00")
+                
+                batch_badge_html = f"""
+                <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 0.5rem 0.85rem; margin-top: 0.5rem; font-size: 0.84rem;">
+                    <div>⚡ Vitesse : <span style="color: #38bdf8; font-weight: 600;">{speed_txt}</span></div>
+                    <div>⏱️ Écoulé total : <span style="color: #cbd5e1; font-weight: 600;">{batch_elapsed_txt}</span></div>
+                    <div>⏳ Fichier en cours : <span style="color: #facc15; font-weight: 600;">{file_eta_txt}</span></div>
+                    <div>📦 Lot restant (ETA) : <span style="color: #34d399; font-weight: 600;">{batch_eta_txt}</span></div>
+                </div>
+                """
+                st.markdown(batch_badge_html, unsafe_allow_html=True)
             else:
                 progress_val = int(st.session_state.get("progress_pct", 0))
                 st.progress(progress_val)
+
+                # Bandeau d'estimation dynamique mono-fichier
+                speed_txt = st.session_state.get("speed_str", "—")
+                eta_txt = st.session_state.get("eta_str", "Calcul...")
+                elapsed_txt = st.session_state.get("elapsed_str", "00:00")
+
+                eta_badge_html = f"""
+                <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 0.5rem 0.85rem; margin-top: 0.5rem; font-size: 0.84rem;">
+                    <div>⚡ Vitesse : <span style="color: #38bdf8; font-weight: 600;">{speed_txt}</span></div>
+                    <div>⏱️ Temps écoulé : <span style="color: #cbd5e1; font-weight: 600;">{elapsed_txt}</span></div>
+                    <div>⏳ Temps restant estimé (ETA) : <span style="color: #34d399; font-weight: 600;">{eta_txt}</span></div>
+                </div>
+                """
+                st.markdown(eta_badge_html, unsafe_allow_html=True)
                 st.markdown(f"**Statut :** `{st.session_state.get('status_label', 'En cours...')}`")
                 
         with col_stop:
@@ -908,6 +967,8 @@ def main():
                 st.session_state.current_file_idx = msg.get("current_idx", 1)
                 st.session_state.progress_pct = 0
                 st.session_state.latest_text = ""
+                st.session_state.speed_str = "—"
+                st.session_state.eta_str = "Calcul..."
             elif status == "file_skipped":
                 st.session_state.current_file_idx = msg.get("current_idx", 1)
             elif status == "progress":
@@ -915,6 +976,12 @@ def main():
                 st.session_state.current_file_name = msg.get("file_name", st.session_state.get("current_file_name", ""))
                 st.session_state.current_file_idx = msg.get("current_idx", st.session_state.get("current_file_idx", 1))
                 st.session_state.latest_text += " " + msg.get("segment_text", "")
+                st.session_state.speed_str = msg.get("speed_str", "—")
+                st.session_state.eta_str = msg.get("eta_str", "Calcul...")
+                st.session_state.elapsed_str = msg.get("elapsed_str", "00:00")
+                if is_batch:
+                    st.session_state.batch_eta_str = msg.get("batch_eta_str", "Calcul...")
+                    st.session_state.batch_elapsed_str = msg.get("batch_elapsed_str", "00:00")
             elif status == "preprocessing":
                 st.session_state.status_label = msg.get("message", "⚡ Prétraitement acoustique en cours...")
             elif status == "diarizing":
@@ -927,6 +994,8 @@ def main():
                     st.session_state.transcription_done = True
                     st.session_state.progress_pct = 100
                     st.session_state.is_preprocessed = msg.get("preprocessed", False)
+                    st.session_state.last_elapsed_seconds = msg.get("elapsed_seconds")
+                    st.session_state.last_audio_duration = msg.get("duration")
                     if msg.get("language"):
                         st.session_state.detected_language = msg.get("language")
                     if msg.get("language_probability") is not None:
@@ -945,16 +1014,43 @@ def main():
                         ]
                     else:
                         st.session_state.result_segments = []
+
+                    # Notification système native Windows Toast
+                    if st.session_state.get("enable_notifications", True):
+                        try:
+                            notify_transcription_complete(
+                                filename=Path(msg.get("file", "")).name,
+                                elapsed_seconds=msg.get("elapsed_seconds"),
+                                audio_duration=msg.get("duration"),
+                                sound=st.session_state.get("enable_chime", True)
+                            )
+                        except Exception:
+                            pass
+
                     st.rerun()
             elif status == "batch_complete":
                 st.session_state.is_processing = False
                 st.session_state.transcription_done = True
+                total_el = msg.get("total_elapsed_seconds", 0.0)
                 st.session_state.batch_stats = {
                     "total": msg.get("total_files", 0),
                     "processed": msg.get("processed", 0),
                     "skipped": msg.get("skipped", 0),
-                    "files": msg.get("files", [])
+                    "files": msg.get("files", []),
+                    "total_elapsed_seconds": total_el
                 }
+
+                # Notification de lot Windows Toast
+                if st.session_state.get("enable_notifications", True):
+                    try:
+                        notify_batch_complete(
+                            total_files=msg.get("processed", 0),
+                            elapsed_seconds=total_el,
+                            sound=st.session_state.get("enable_chime", True)
+                        )
+                    except Exception:
+                        pass
+
                 st.rerun()
             elif status == "error":
                 st.session_state.is_processing = False
@@ -999,7 +1095,7 @@ def main():
             else:
                 st.success(":material/celebration: Transcription du dossier terminée avec succès !")
             
-            col_b1, col_b2, col_b3 = st.columns(3)
+            col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
                 ui.metric_card(
                     label="Total Analysé", 
@@ -1017,6 +1113,14 @@ def main():
                     label="Déjà Existantes", 
                     value=str(stats.get("skipped", 0)), 
                     description="Ignorées (Smart Resume)"
+                )
+            with col_b4:
+                b_tot = stats.get("total_elapsed_seconds")
+                b_val = format_friendly_duration(b_tot) if b_tot else "—"
+                ui.metric_card(
+                    label="Temps de calcul",
+                    value=b_val,
+                    description="Durée réelle du lot"
                 )
                 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
@@ -1229,8 +1333,14 @@ def main():
             gain_label = "Auto-Gain" if is_prep else "Direct"
             vad_desc = f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'} | {gain_label}"
 
+            elapsed_sec = st.session_state.get("last_elapsed_seconds")
+            audio_dur = st.session_state.get("last_audio_duration")
+            speed_val = (audio_dur / elapsed_sec) if elapsed_sec and audio_dur and elapsed_sec > 0.1 else None
+            speed_desc = f"Vitesse : {speed_val:.1f}x" if speed_val else "Instantané"
+            el_str = format_friendly_duration(elapsed_sec) if elapsed_sec is not None else "—"
+
             if speakers:
-                col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+                col_res1, col_res2, col_res3, col_res4, col_res5 = st.columns(5)
                 with col_res1:
                     ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
@@ -1239,14 +1349,18 @@ def main():
                     ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
                 with col_res4:
                     ui.metric_card(label="Locuteurs", value=f"{len(speakers)} voix", description=", ".join(speakers[:2]))
+                with col_res5:
+                    ui.metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
             else:
-                col_res1, col_res2, col_res3 = st.columns(3)
+                col_res1, col_res2, col_res3, col_res4 = st.columns(4)
                 with col_res1:
                     ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
                     ui.metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
                     ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                with col_res4:
+                    ui.metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
 
