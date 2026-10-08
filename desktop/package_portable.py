@@ -346,7 +346,7 @@ def package_portable(
     # 6. Archivage ZIP optionnel
     if create_zip:
         suffix = "-CPU" if cpu_only else ""
-        zip_path = output_dir.parent / f"LocalScribe-Portable-Windows-x64{suffix}.zip"
+        zip_path = output_dir.parent / f"LocalScribe-v{__version__}-Portable-Windows-x64{suffix}.zip"
         print(f"\n[*] Compression en archive ZIP : {zip_path.name}...")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for f in output_dir.rglob("*"):
