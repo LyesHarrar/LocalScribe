@@ -29,6 +29,13 @@ from ui.styles import inject_custom_css
 from ui.prompts_templates import render_llm_templates
 from core.hardware_profiler import detect_hardware
 from core.clipboard import copy_to_clipboard
+from core.translation_engine import (
+    SUPPORTED_TRANSLATION_LANGUAGES,
+    is_translation_model_installed,
+    ensure_translation_model,
+    get_translation_engine,
+    resolve_nllb_code
+)
 from core.transcription_engine import (
     transcribe_file_threaded, 
     transcribe_batch_threaded, 
@@ -51,14 +58,17 @@ def open_folder_in_explorer(folder_path: Path):
         pass
 
 def create_batch_zip(files_list: list) -> bytes:
-    """Génère une archive ZIP en mémoire contenant tous les fichiers d'export du lot."""
+    """Génère une archive ZIP en mémoire contenant tous les fichiers d'export du lot (originaux et traduits)."""
     if not files_list:
         return b""
     try:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in files_list:
-                for key in ("txt_path", "srt_path", "md_path"):
+                for key in (
+                    "txt_path", "srt_path", "md_path",
+                    "translated_txt_path", "translated_srt_path", "translated_md_path"
+                ):
                     p_str = f.get(key)
                     if p_str:
                         p = Path(p_str)
@@ -208,6 +218,48 @@ def render_sidebar():
                     step=1
                 )
         st.session_state.num_speakers = num_speakers
+
+        # 6. Traduction Multilingue Hors-Ligne (NLLB-200)
+        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("##### 🌐 Traduction Hors-Ligne (NLLB-200)")
+        
+        trans_options = ["Désactivée (langue originale)"] + [
+            f"{d['flag']} {d['name']}" for d in SUPPORTED_TRANSLATION_LANGUAGES.values()
+        ]
+        chosen_trans = st.selectbox(
+            "Traduire automatiquement vers :",
+            options=trans_options,
+            index=0,
+            help="Traduction neuronale 100% hors-ligne via Meta NLLB-200. Génère des fichiers traduits synchronisés (.txt, .srt, .md)."
+        )
+        
+        target_trans_code = None
+        if chosen_trans != "Désactivée (langue originale)":
+            for c, d in SUPPORTED_TRANSLATION_LANGUAGES.items():
+                if d["name"] in chosen_trans:
+                    target_trans_code = c
+                    break
+        st.session_state.target_translation_code = target_trans_code
+        
+        model_ready = is_translation_model_installed()
+        if model_ready:
+            st.markdown(
+                render_badge("✅ Modèle NLLB-200 prêt", color="#34d399", bg="rgba(52, 211, 153, 0.1)"), 
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                render_badge("⚠️ Modèle non téléchargé", color="#f59e0b", bg="rgba(245, 158, 11, 0.1)"), 
+                unsafe_allow_html=True
+            )
+            if st.button("📥 Télécharger NLLB-200 (622 Mo)", key="btn_dl_nllb_sidebar", use_container_width=True):
+                with st.spinner("Téléchargement du modèle de traduction en cours (622 Mo)..."):
+                    try:
+                        ensure_translation_model()
+                        st.success("Modèle téléchargé avec succès !")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erreur de téléchargement : {e}")
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
@@ -390,6 +442,49 @@ def render_history_view():
                     delete_record(rec_id)
                     st.rerun()
 
+            # Traduction à la demande pour l'historique
+            with st.expander("🌐 Traduire cet enregistrement...", expanded=False):
+                if not is_translation_model_installed():
+                    st.info("Modèle NLLB-200 non installé. Téléchargez-le dans la barre latérale pour activer la traduction.")
+                else:
+                    col_ht_tgt, col_ht_btn = st.columns([3, 1])
+                    with col_ht_tgt:
+                        h_trans_labels = [f"{d['flag']} {d['name']}" for d in SUPPORTED_TRANSLATION_LANGUAGES.values()]
+                        h_trans_codes = list(SUPPORTED_TRANSLATION_LANGUAGES.keys())
+                        chosen_h_label = st.selectbox("Langue cible :", options=h_trans_labels, index=1, key=f"sb_h_tgt_{rec_id}")
+                        chosen_h_code = h_trans_codes[h_trans_labels.index(chosen_h_label)]
+                    with col_ht_btn:
+                        st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+                        run_h_trans = st.button("🌐 Traduire", key=f"btn_h_tr_{rec_id}", use_container_width=True)
+                        
+                    h_tr_key = f"hist_tr_{rec_id}_{chosen_h_code}"
+                    if run_h_trans:
+                        with st.spinner("Traduction hors-ligne en cours..."):
+                            try:
+                                engine = get_translation_engine()
+                                src_lang_rec = rec.get("language") or "auto"
+                                h_res = engine.translate_text(txt_content, src_lang=src_lang_rec, tgt_lang=chosen_h_code)
+                                st.session_state[h_tr_key] = h_res
+                                st.toast(f"Traduit vers {chosen_h_label} !", icon="🌐")
+                            except Exception as e:
+                                st.error(f"Erreur de traduction : {e}")
+                    if st.session_state.get(h_tr_key):
+                        st.text_area(f"Résultat ({chosen_h_label}) :", value=st.session_state[h_tr_key], height=120, key=f"ta_h_res_{rec_id}")
+                        col_h_cp, col_h_dl = st.columns(2)
+                        with col_h_cp:
+                            if st.button("📋 Copier", key=f"btn_h_cp_{rec_id}", use_container_width=True):
+                                if copy_to_clipboard(st.session_state[h_tr_key]):
+                                    st.toast("Copié !", icon="📋")
+                        with col_h_dl:
+                            st.download_button(
+                                "⬇️ .txt Traduit",
+                                data=st.session_state[h_tr_key],
+                                file_name=f"{Path(filename).stem}_{chosen_h_code}.txt",
+                                mime="text/plain",
+                                key=f"dl_h_tr_{rec_id}",
+                                use_container_width=True
+                            )
+
 
 def main():
     st.set_page_config(
@@ -548,7 +643,8 @@ def main():
                                 "initial_prompt": st.session_state.get("initial_prompt"),
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
-                                "num_speakers": st.session_state.get("num_speakers")
+                                "num_speakers": st.session_state.get("num_speakers"),
+                                "target_translation": st.session_state.get("target_translation_code")
                             }
                         )
                         add_script_run_ctx(t)
@@ -654,7 +750,8 @@ def main():
                                 "initial_prompt": st.session_state.get("initial_prompt"),
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
-                                "num_speakers": st.session_state.get("num_speakers")
+                                "num_speakers": st.session_state.get("num_speakers"),
+                                "target_translation": st.session_state.get("target_translation_code")
                             }
                         )
                     else:
@@ -679,7 +776,8 @@ def main():
                                 "initial_prompt": st.session_state.get("initial_prompt"),
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
-                                "num_speakers": st.session_state.get("num_speakers")
+                                "num_speakers": st.session_state.get("num_speakers"),
+                                "target_translation": st.session_state.get("target_translation_code")
                             }
                         )
                         
@@ -751,6 +849,8 @@ def main():
                 st.session_state.latest_text += " " + msg.get("segment_text", "")
             elif status == "diarizing":
                 st.session_state.status_label = msg.get("message", "🗣️ Identification des locuteurs...")
+            elif status == "translating":
+                st.session_state.status_label = msg.get("message", "🌐 Traduction neuronale hors-ligne...")
             elif status == "file_complete":
                 if not is_batch:
                     st.session_state.is_processing = False
@@ -763,6 +863,11 @@ def main():
                     if msg.get("task"):
                         st.session_state.executed_task = msg.get("task")
                     st.session_state.detected_speakers = msg.get("speakers", [])
+                    st.session_state.translated_text = msg.get("translated_text", "")
+                    st.session_state.translated_txt_path = msg.get("translated_txt_path", "")
+                    st.session_state.translated_srt_path = msg.get("translated_srt_path", "")
+                    st.session_state.translated_md_path = msg.get("translated_md_path", "")
+                    st.session_state.active_target_translation = msg.get("target_translation", None)
                     st.rerun()
             elif status == "batch_complete":
                 st.session_state.is_processing = False
@@ -959,6 +1064,39 @@ def main():
                         else:
                             st.info("Aucun contenu textuel généré.")
 
+                        # Aperçu de la traduction si disponible pour ce fichier
+                        tr_text = cf.get("translated_text", "")
+                        tr_txt_p = Path(cf.get("translated_txt_path", "")) if cf.get("translated_txt_path") else None
+                        tr_srt_p = Path(cf.get("translated_srt_path", "")) if cf.get("translated_srt_path") else None
+                        if tr_text:
+                            with st.expander(f"🌐 Version Traduite ({cf.get('target_translation', 'Traduction')})", expanded=False):
+                                col_btr_cp, col_btr_txt, col_btr_srt = st.columns([1.5, 1, 1])
+                                with col_btr_cp:
+                                    if st.button("📋 Copier Traduction", key=f"btn_cp_btr_{idx}", use_container_width=True):
+                                        if copy_to_clipboard(tr_text):
+                                            st.toast("Traduction copiée !", icon="📋")
+                                with col_btr_txt:
+                                    if tr_txt_p and tr_txt_p.exists():
+                                        st.download_button(
+                                            label="⬇️ .txt Traduit",
+                                            data=tr_txt_p.read_text(encoding="utf-8"),
+                                            file_name=tr_txt_p.name,
+                                            mime="text/plain",
+                                            key=f"dl_btr_txt_{idx}",
+                                            use_container_width=True
+                                        )
+                                with col_btr_srt:
+                                    if tr_srt_p and tr_srt_p.exists():
+                                        st.download_button(
+                                            label="⏱️ .srt Traduit",
+                                            data=tr_srt_p.read_text(encoding="utf-8"),
+                                            file_name=tr_srt_p.name,
+                                            mime="text/plain",
+                                            key=f"dl_btr_srt_{idx}",
+                                            use_container_width=True
+                                        )
+                                st.text_area(f"Texte traduit ({cf_name}) :", value=tr_text, height=120, key=f"ta_btr_{idx}", disabled=True)
+
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
             if st.button(reset_label, use_container_width=True, key="btn_reset_batch"):
@@ -1061,10 +1199,11 @@ def main():
             st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
             
             # Onglets élégants Linear / Shadcn
-            tab_txt, tab_md, tab_srt, tab_llm = st.tabs([
+            tab_txt, tab_md, tab_srt, tab_trans, tab_llm = st.tabs([
                 ":material/description: Texte Brut (.txt)", 
                 ":material/markdown: Markdown (.md)", 
                 "⏱️ Sous-titres (.srt)", 
+                "🌐 Traduction Hors-Ligne",
                 "🤖 Prompts LLM"
             ])
             
@@ -1118,6 +1257,129 @@ def main():
                         if copy_to_clipboard(srt_text):
                             st.toast("Sous-titres copiés dans le presse-papier !", icon="📋")
                 st.code(srt_text, language="text")
+                
+            with tab_trans:
+                st.markdown("##### 🌐 Traduction Neuronale Hors-Ligne (NLLB-200)")
+                st.markdown("<p style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.75rem;'>Traduisez cette transcription vers n'importe quelle langue sans Internet. Préserve les locuteurs et les sous-titres synchronisés.</p>", unsafe_allow_html=True)
+                
+                if not is_translation_model_installed():
+                    st.warning("Le modèle de traduction NLLB-200 (622 Mo) n'est pas encore téléchargé localement.")
+                    if st.button("📥 Télécharger le modèle NLLB-200 maintenant", key="btn_dl_nllb_tab", type="primary"):
+                        with st.spinner("Téléchargement du modèle NLLB-200 en cours (622 Mo)..."):
+                            try:
+                                ensure_translation_model()
+                                st.success("Modèle téléchargé avec succès !")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erreur de téléchargement : {e}")
+                else:
+                    col_tr_src, col_tr_tgt, col_tr_btn = st.columns([1.5, 1.5, 1.2])
+                    
+                    trans_lang_list = list(SUPPORTED_TRANSLATION_LANGUAGES.keys())
+                    trans_labels = [f"{d['flag']} {d['name']}" for d in SUPPORTED_TRANSLATION_LANGUAGES.values()]
+                    
+                    default_src_code = lang_code if lang_code in SUPPORTED_TRANSLATION_LANGUAGES else "fr"
+                    default_src_idx = trans_lang_list.index(default_src_code) if default_src_code in trans_lang_list else 0
+                    
+                    default_tgt_code = "en" if default_src_code == "fr" else "fr"
+                    default_tgt_idx = trans_lang_list.index(default_tgt_code) if default_tgt_code in trans_lang_list else 1
+                    
+                    with col_tr_src:
+                        chosen_src_label = st.selectbox("Langue source :", options=trans_labels, index=default_src_idx, key="sb_tr_src")
+                        chosen_src_code = trans_lang_list[trans_labels.index(chosen_src_label)]
+                    with col_tr_tgt:
+                        chosen_tgt_label = st.selectbox("Langue cible :", options=trans_labels, index=default_tgt_idx, key="sb_tr_tgt")
+                        chosen_tgt_code = trans_lang_list[trans_labels.index(chosen_tgt_label)]
+                    with col_tr_btn:
+                        st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+                        launch_translation = st.button("🌐 Traduire", type="primary", use_container_width=True, key="btn_run_translation")
+                        
+                    state_tr_key = f"trans_result_{base_name}_{chosen_tgt_code}"
+                    
+                    # Si une traduction automatique a été générée pendant la transcription
+                    if st.session_state.get("translated_text") and st.session_state.get("active_target_translation") == chosen_tgt_code:
+                        if state_tr_key not in st.session_state:
+                            st.session_state[state_tr_key] = {
+                                "txt": st.session_state.get("translated_text", ""),
+                                "srt": Path(st.session_state.get("translated_srt_path", "")).read_text(encoding="utf-8") if st.session_state.get("translated_srt_path") and Path(st.session_state["translated_srt_path"]).exists() else "",
+                                "md": Path(st.session_state.get("translated_md_path", "")).read_text(encoding="utf-8") if st.session_state.get("translated_md_path") and Path(st.session_state["translated_md_path"]).exists() else ""
+                            }
+                            
+                    if launch_translation:
+                        with st.spinner(f"Traduction vers {chosen_tgt_label} en cours (CTranslate2 hors-ligne)..."):
+                            try:
+                                engine = get_translation_engine(device=st.session_state.hw_profile.device)
+                                tr_txt = engine.translate_text(txt_text, src_lang=chosen_src_code, tgt_lang=chosen_tgt_code)
+                                tr_srt = engine.translate_srt(srt_text, src_lang=chosen_src_code, tgt_lang=chosen_tgt_code) if srt_text else ""
+                                tr_md = f"# Transcription ({chosen_tgt_label})\n\n{tr_txt}"
+                                
+                                # Écritures atomiques sur disque
+                                (out_dir / f"{base_name}_{chosen_tgt_code}.txt").write_text(tr_txt, encoding="utf-8")
+                                if tr_srt:
+                                    (out_dir / f"{base_name}_{chosen_tgt_code}.srt").write_text(tr_srt, encoding="utf-8")
+                                (out_dir / f"{base_name}_{chosen_tgt_code}.md").write_text(tr_md, encoding="utf-8")
+                                
+                                st.session_state[state_tr_key] = {
+                                    "txt": tr_txt,
+                                    "srt": tr_srt,
+                                    "md": tr_md
+                                }
+                                st.toast(f"Traduction vers {chosen_tgt_label} terminée !", icon="🌐")
+                            except Exception as e:
+                                st.error(f"Erreur lors de la traduction : {e}")
+                                
+                    curr_trans = st.session_state.get(state_tr_key)
+                    if curr_trans and curr_trans.get("txt"):
+                        res_txt = curr_trans["txt"]
+                        res_srt = curr_trans.get("srt", "")
+                        res_md = curr_trans.get("md", "")
+                        
+                        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+                        col_t_act_cp, col_t_act_txt, col_t_act_srt, col_t_act_md = st.columns(4)
+                        with col_t_act_cp:
+                            if st.button("📋 Copier la traduction", key=f"btn_cp_tr_{chosen_tgt_code}", use_container_width=True):
+                                if copy_to_clipboard(res_txt):
+                                    st.toast("Traduction copiée dans le presse-papier !", icon="📋")
+                                else:
+                                    st.error("Impossible d'accéder au presse-papier.")
+                        with col_t_act_txt:
+                            st.download_button(
+                                label="⬇️ .txt Traduit",
+                                data=res_txt,
+                                file_name=f"{base_name}_{chosen_tgt_code}.txt",
+                                mime="text/plain",
+                                use_container_width=True,
+                                key=f"dl_tr_txt_{chosen_tgt_code}"
+                            )
+                        with col_t_act_srt:
+                            if res_srt:
+                                st.download_button(
+                                    label="⏱️ .srt Traduit",
+                                    data=res_srt,
+                                    file_name=f"{base_name}_{chosen_tgt_code}.srt",
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                    key=f"dl_tr_srt_{chosen_tgt_code}"
+                                )
+                            else:
+                                st.caption("SRT non disponible")
+                        with col_t_act_md:
+                            if res_md:
+                                st.download_button(
+                                    label="⬇️ .md Traduit",
+                                    data=res_md,
+                                    file_name=f"{base_name}_{chosen_tgt_code}.md",
+                                    mime="text/markdown",
+                                    use_container_width=True,
+                                    key=f"dl_tr_md_{chosen_tgt_code}"
+                                )
+                                
+                        st.text_area(f"Texte traduit ({chosen_tgt_label}) :", value=res_txt, height=250, key=f"ta_tr_{chosen_tgt_code}")
+                        if res_srt:
+                            with st.expander("⏱️ Aperçu des sous-titres traduits (.srt)"):
+                                st.code(res_srt, language="text")
+                    else:
+                        st.info("Sélectionnez les langues et cliquez sur '🌐 Traduire' pour générer la version traduite.")
                 
             with tab_llm:
                 render_llm_templates(transcription_text=txt_text)

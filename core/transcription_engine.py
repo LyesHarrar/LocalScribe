@@ -64,7 +64,8 @@ def transcribe_file_threaded(
     initial_prompt: Optional[str] = None,
     vad_filter: bool = True,
     diarize: bool = False,
-    num_speakers: Optional[int] = None
+    num_speakers: Optional[int] = None,
+    target_translation: Optional[str] = None
 ) -> None:
     """
     Transcrit un fichier unique en arrière-plan.
@@ -193,6 +194,71 @@ def transcribe_file_threaded(
                 target.unlink()
             tmp.rename(target)
 
+        # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8 via CTranslate2)
+        translated_txt_path = ""
+        translated_srt_path = ""
+        translated_md_path = ""
+        translated_text_content = ""
+        if target_translation and not stop_event.is_set():
+            progress_queue.put({
+                "status": "translating",
+                "file": str(file_path),
+                "target_lang": target_translation,
+                "message": f"🌐 Traduction vers {target_translation} en cours..."
+            })
+            try:
+                from core.translation_engine import (
+                    get_translation_engine,
+                    is_translation_model_installed,
+                    ensure_translation_model
+                )
+                if not is_translation_model_installed():
+                    ensure_translation_model(
+                        status_callback=lambda m: progress_queue.put({
+                            "status": "translating",
+                            "file": str(file_path),
+                            "message": m
+                        })
+                    )
+                trans_engine = get_translation_engine(device=profile.device)
+                trans_segs = trans_engine.translate_segments(
+                    segments,
+                    src_lang=detected_lang,
+                    tgt_lang=target_translation
+                )
+                
+                out_txt_tr = output_dir / f"{base_name}_{target_translation}.txt"
+                out_srt_tr = output_dir / f"{base_name}_{target_translation}.srt"
+                out_md_tr = output_dir / f"{base_name}_{target_translation}.md"
+                
+                tmp_txt_tr = output_dir / f"{base_name}_{target_translation}.txt.tmp"
+                tmp_srt_tr = output_dir / f"{base_name}_{target_translation}.srt.tmp"
+                tmp_md_tr = output_dir / f"{base_name}_{target_translation}.md.tmp"
+                
+                meta_tr = dict(metadata)
+                meta_tr["target_translation"] = target_translation
+                
+                tmp_txt_tr.write_text(generate_txt(trans_segs), encoding="utf-8")
+                tmp_srt_tr.write_text(generate_srt(trans_segs), encoding="utf-8")
+                tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
+                
+                for target, tmp in [(out_txt_tr, tmp_txt_tr), (out_srt_tr, tmp_srt_tr), (out_md_tr, tmp_md_tr)]:
+                    if target.exists():
+                        target.unlink()
+                    tmp.rename(target)
+                    
+                translated_txt_path = str(out_txt_tr)
+                translated_srt_path = str(out_srt_tr)
+                translated_md_path = str(out_md_tr)
+                translated_text_content = out_txt_tr.read_text(encoding="utf-8") if out_txt_tr.exists() else ""
+            except Exception as t_err:
+                logger.warning(f"Erreur lors de la traduction : {t_err}")
+                progress_queue.put({
+                    "status": "warning",
+                    "file": str(file_path),
+                    "warning": f"Traduction impossible : {t_err}"
+                })
+
         # Enregistrement automatique dans l'historique SQLite
         try:
             from core.history_manager import add_record
@@ -220,7 +286,12 @@ def transcribe_file_threaded(
             "language": detected_lang,
             "language_probability": lang_prob,
             "task": task,
-            "speakers": detected_speakers
+            "speakers": detected_speakers,
+            "target_translation": target_translation,
+            "translated_txt_path": translated_txt_path,
+            "translated_srt_path": translated_srt_path,
+            "translated_md_path": translated_md_path,
+            "translated_text": translated_text_content
         })
         
     except Exception as e:
@@ -242,7 +313,8 @@ def transcribe_batch_threaded(
     diarize: bool = False,
     num_speakers: Optional[int] = None,
     files: Optional[List[Path]] = None,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    target_translation: Optional[str] = None
 ) -> None:
     """
     Transcription par lot (file d'attente ou scan récursif) :
@@ -445,6 +517,66 @@ def transcribe_batch_threaded(
 
             txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else ""
 
+            # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8)
+            translated_txt_path = ""
+            translated_srt_path = ""
+            translated_md_path = ""
+            translated_text_content = ""
+            if target_translation and not stop_event.is_set():
+                try:
+                    from core.translation_engine import (
+                        get_translation_engine,
+                        is_translation_model_installed,
+                        ensure_translation_model
+                    )
+                    if not is_translation_model_installed():
+                        ensure_translation_model()
+                    trans_engine = get_translation_engine(device=profile.device if profile else "auto")
+                    trans_segs = trans_engine.translate_segments(
+                        segments,
+                        src_lang=detected_lang,
+                        tgt_lang=target_translation
+                    )
+                    
+                    out_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt"
+                    tmp_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt.tmp"
+                    tmp_txt_tr.write_text(generate_txt(trans_segs), encoding="utf-8")
+                    if out_txt_tr.exists():
+                        out_txt_tr.unlink()
+                    tmp_txt_tr.rename(out_txt_tr)
+                    translated_txt_path = str(out_txt_tr)
+                    translated_text_content = out_txt_tr.read_text(encoding="utf-8") if out_txt_tr.exists() else ""
+                    
+                    if export_srt:
+                        out_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt"
+                        tmp_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt.tmp"
+                        tmp_srt_tr.write_text(generate_srt(trans_segs), encoding="utf-8")
+                        if out_srt_tr.exists():
+                            out_srt_tr.unlink()
+                        tmp_srt_tr.rename(out_srt_tr)
+                        translated_srt_path = str(out_srt_tr)
+                        
+                    if export_md:
+                        out_md_tr = dest_dir / f"{base_name}_{target_translation}.md"
+                        tmp_md_tr = dest_dir / f"{base_name}_{target_translation}.md.tmp"
+                        meta_tr = {
+                            "filename": file_path.name,
+                            "duration": duration,
+                            "language": detected_lang,
+                            "language_probability": f"{lang_prob}%",
+                            "task": task,
+                            "model": model_to_use,
+                            "target_translation": target_translation,
+                            "speakers": detected_speakers if detected_speakers else None
+                        }
+                        tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
+                        if out_md_tr.exists():
+                            out_md_tr.unlink()
+                        tmp_md_tr.rename(out_md_tr)
+                        translated_md_path = str(out_md_tr)
+                except Exception as t_err:
+                    logger.warning(f"Erreur lors de la traduction du fichier batch {file_path.name}: {t_err}")
+
             # Enregistrement automatique dans l'historique SQLite
             try:
                 from core.history_manager import add_record
@@ -476,7 +608,12 @@ def transcribe_batch_threaded(
                 "txt_path": str(out_txt),
                 "srt_path": str(out_srt) if export_srt else "",
                 "md_path": str(out_md) if export_md else "",
-                "text": txt_text_content
+                "text": txt_text_content,
+                "target_translation": target_translation,
+                "translated_txt_path": translated_txt_path,
+                "translated_srt_path": translated_srt_path,
+                "translated_md_path": translated_md_path,
+                "translated_text": translated_text_content
             }
             completed_files.append(completed_info)
 
@@ -492,7 +629,12 @@ def transcribe_batch_threaded(
                 "speakers": detected_speakers,
                 "duration": duration,
                 "language": detected_lang,
-                "language_probability": lang_prob
+                "language_probability": lang_prob,
+                "target_translation": target_translation,
+                "translated_txt_path": translated_txt_path,
+                "translated_srt_path": translated_srt_path,
+                "translated_md_path": translated_md_path,
+                "translated_text": translated_text_content
             })
 
         # 5. Fin du traitement par lot
