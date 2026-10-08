@@ -57,4 +57,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.6 — Traitement par Lot & File d'Attente Multi-Fichiers (Batch Processing)** : *Implémentée et validée (dropzone multi-fichiers drag & drop avec accept_multiple_files, file d'attente séquentielle à la chaîne en thread d'arrière-plan, chargement unique du modèle Whisper, double barre de progression globale et par fichier, écritures atomiques, persistance SQLite individuelle, téléchargement global ZIP en mémoire, copie 1-clic de tout le lot, fiches interactives par fichier avec aperçu et exports individuels, 56/56 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.6 implémentée et validée.*
+*Dernière mise à jour par l'Agent : Version 1.6 mergée avec succès sur main.*
