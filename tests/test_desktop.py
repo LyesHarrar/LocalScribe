@@ -201,6 +201,8 @@ class TestPortablePackager(unittest.TestCase):
         self.assertIn("CPU (Optimisé multi-cœurs)", content)
         self.assertIn("LICENSES-THIRD-PARTY.txt", content)
         self.assertIn("FFmpeg", content)
+        self.assertIn("Lyes Harrar", content)
+        self.assertIn("LyesHarrar/LocalScribe", content)
 
     def test_batch_launcher_injects_bin_path(self):
         """Vérifie que Lancer-LocalScribe.bat injecte bin/ dans le PATH."""

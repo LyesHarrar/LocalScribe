@@ -17,6 +17,11 @@ from pathlib import Path
 from typing import Set, Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from core.version import __version__, __author__, __github_repo__
+
 DEFAULT_DIST_DIR = PROJECT_ROOT / "dist" / "LocalScribe-Portable"
 
 
@@ -67,8 +72,9 @@ pause
 def create_readme(target_dir: Path, is_cpu_only: bool = False) -> Path:
     """Génère le guide utilisateur README-PORTABLE.txt."""
     readme_content = f"""======================================================================
-           LocalScribe — Studio de Transcription Audio/Vidéo IA
+           LocalScribe v{__version__} — Studio de Transcription Audio/Vidéo IA
                    Distribution Portable Autonome (Windows x64)
+           Développé par {__author__} ({__github_repo__})
 ======================================================================
 
 Bienvenue sur LocalScribe ! Cette version est 100% autonome et ne nécessite
