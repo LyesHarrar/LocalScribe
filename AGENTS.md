@@ -59,4 +59,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.8 — Éditeur Audio-Texte Interactif & Synchronisé** : *Implémentée et validée (lecteur karaoké synchronisé avec défilement et mise en surbrillance automatique en temps réel, saut au timecode au clic, outil de recherche et remplacement global, fusion et découpage de segments, édition en grille tabulaire st.data_editor, sauvegarde atomique et mise à jour de l'historique SQLite, 75/75 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.8 implémentée et validée (75/75 tests au vert).*
+*Dernière mise à jour par l'Agent : Version 1.8 mergée avec succès sur main (75/75 tests au vert).*
