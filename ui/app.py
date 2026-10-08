@@ -3,10 +3,12 @@ LocalScribe — Interface Utilisateur Haute Fidélité (Design System Épuré).
 Assorti au logo : Noir Obsidienne (#05070e) & Bleu Électrique (#2e74fd).
 """
 
+import io
 import os
 import sys
 import time
 import queue
+import zipfile
 import threading
 import tempfile
 import subprocess
@@ -47,6 +49,25 @@ def open_folder_in_explorer(folder_path: Path):
             subprocess.run(["xdg-open", str(folder_path)])
     except Exception:
         pass
+
+def create_batch_zip(files_list: list) -> bytes:
+    """Génère une archive ZIP en mémoire contenant tous les fichiers d'export du lot."""
+    if not files_list:
+        return b""
+    try:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in files_list:
+                for key in ("txt_path", "srt_path", "md_path"):
+                    p_str = f.get(key)
+                    if p_str:
+                        p = Path(p_str)
+                        if p.exists() and p.is_file():
+                            zf.write(p, arcname=p.name)
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception:
+        return b""
 
 def select_folder_dialog() -> str:
     """Ouvre le sélecteur natif de dossier Windows/Mac."""
@@ -414,18 +435,18 @@ def main():
     mode_selection = st.segmented_control(
         "Mode de transcription",
         options=[
-            ":material/folder: Mode Dossier (Batch)", 
-            ":material/description: Mode Fichier Unique",
+            ":material/upload_file: File d'attente (Multi-Fichiers)", 
+            ":material/folder: Mode Dossier (Scan Récursif)",
             ":material/history: Historique & Bibliothèque"
         ],
-        default=":material/folder: Mode Dossier (Batch)",
+        default=":material/upload_file: File d'attente (Multi-Fichiers)",
         selection_mode="single",
         label_visibility="collapsed",
         key="mode_segmented_control"
     )
     if not mode_selection:
-        mode_selection = ":material/folder: Mode Dossier (Batch)"
-    is_batch_mode = "Dossier" in mode_selection
+        mode_selection = ":material/upload_file: File d'attente (Multi-Fichiers)"
+    is_folder_mode = "Dossier" in mode_selection
     is_history_mode = "Historique" in mode_selection
 
     # =========================================================================
@@ -437,8 +458,8 @@ def main():
         if is_history_mode:
             render_history_view()
 
-        # --- MODE 1 : DOSSIER COMPLET (BATCH RÉCURSIF IN-PLACE) ---
-        elif is_batch_mode:
+        # --- MODE 1 : DOSSIER COMPLET (SCAN RÉCURSIF IN-PLACE) ---
+        elif is_folder_mode:
             st.markdown("### :material/folder: Sélection du dossier racine")
             st.markdown("""
             <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
@@ -504,6 +525,7 @@ def main():
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
                         st.session_state.is_batch = True
+                        st.session_state.is_queue_batch = False
                         st.session_state.progress_pct = 0
                         st.session_state.status_label = "Démarrage du lot..."
                         st.session_state.current_file_name = ""
@@ -537,56 +559,130 @@ def main():
             elif st.session_state.target_folder:
                 st.error("Le dossier spécifié n'existe pas ou n'est pas accessible.")
 
-        # --- MODE 2 : FICHIER UNIQUE ---
+        # --- MODE 2 : FILE D'ATTENTE MULTI-FICHIERS (DRAG & DROP) ---
         else:
-            st.markdown("### :material/description: Importer un enregistrement individuel")
-            uploaded_file = st.file_uploader(
-                "Glissez-déposez votre fichier ici",
-                type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov"]
+            st.markdown("### :material/upload_file: File d'attente de fichiers (Glisser-Déposer)")
+            st.markdown("""
+            <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+                <div style="color: #e2e8f0; font-size: 0.92rem; line-height: 1.5;">
+                    Glissez-déposez <strong>1, 5, 10 fichiers ou plus d'un coup</strong> ci-dessous. 
+                    LocalScribe va traiter l'ensemble des fichiers <strong>à la chaîne en arrière-plan</strong> 
+                    avec le modèle Whisper chargé en mémoire une seule fois.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            uploaded_files = st.file_uploader(
+                "Glissez-déposez vos fichiers ici (sélection multiple supportée) :",
+                type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov", "avi", "webm"],
+                accept_multiple_files=True
             )
             
-            if uploaded_file:
+            if uploaded_files:
+                total_mb = sum(f.size for f in uploaded_files) / (1024 * 1024)
                 col_info1, col_info2, col_info3 = st.columns(3)
-                file_size_mb = uploaded_file.size / (1024 * 1024)
                 with col_info1:
-                    ui.metric_card(label="Fichier", value=uploaded_file.name[:15]+"...", description="Fichier source")
+                    ui.metric_card(
+                        label="Fichiers en File", 
+                        value=f"{len(uploaded_files)} fichier(s)", 
+                        description="Prêts pour traitement"
+                    )
                 with col_info2:
-                    ui.metric_card(label="Taille", value=f"{file_size_mb:.2f} MB", description="Poids du fichier")
+                    ui.metric_card(
+                        label="Taille Cumulée", 
+                        value=f"{total_mb:.1f} MB", 
+                        description="Poids total des médias"
+                    )
                 with col_info3:
-                    ui.metric_card(label="Modèle Actif", value=st.session_state.selected_model, description="faster-whisper")
+                    ui.metric_card(
+                        label="Modèle Whisper", 
+                        value=st.session_state.selected_model, 
+                        description="faster-whisper local"
+                    )
                     
-                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-                if st.button(":material/rocket_launch: Démarrer la transcription", key="btn_launch_single", type="primary", use_container_width=True):
-                    file_path = save_uploaded_file(uploaded_file)
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+                with st.expander(f"📋 Liste des {len(uploaded_files)} fichier(s) en attente", expanded=(len(uploaded_files) <= 5)):
+                    for idx, f in enumerate(uploaded_files, start=1):
+                        f_mb = f.size / (1024 * 1024)
+                        st.markdown(f"**{idx}.** `{f.name}` — *{f_mb:.2f} MB*")
+
+                st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
+                st.markdown("##### :material/settings: Options de sortie pour la file :")
+                col_o1, col_o2, col_o3 = st.columns(3)
+                with col_o1:
+                    st.checkbox(":material/description: Texte brut (.txt)", value=True, disabled=True, key="chk_q_txt")
+                with col_o2:
+                    queue_export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=True, key="chk_q_srt")
+                with col_o3:
+                    queue_export_md = st.checkbox(":material/markdown: Markdown (.md)", value=True, key="chk_q_md")
+
+                st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+                btn_label = (
+                    ":material/rocket_launch: Démarrer la transcription (1 fichier)"
+                    if len(uploaded_files) == 1
+                    else f":material/rocket_launch: Lancer la file d'attente ({len(uploaded_files)} fichiers)"
+                )
+                
+                if st.button(btn_label, key="btn_launch_queue", type="primary", use_container_width=True):
+                    saved_paths = [save_uploaded_file(f) for f in uploaded_files]
                     output_dir = PROJECT_ROOT / "output"
+                    output_dir.mkdir(parents=True, exist_ok=True)
                     
                     st.session_state.progress_queue = queue.Queue()
                     st.session_state.stop_event = threading.Event()
-                    st.session_state.current_file = file_path
                     st.session_state.output_dir = output_dir
                     st.session_state.is_processing = True
-                    st.session_state.is_batch = False
                     st.session_state.progress_pct = 0
                     st.session_state.status_label = "Initialisation..."
                     st.session_state.latest_text = ""
                     
-                    t = threading.Thread(
-                        target=transcribe_file_threaded,
-                        kwargs={
-                            "file_path": file_path,
-                            "output_dir": output_dir,
-                            "profile": st.session_state.hw_profile,
-                            "progress_queue": st.session_state.progress_queue,
-                            "stop_event": st.session_state.stop_event,
-                            "model_size": st.session_state.selected_model,
-                            "language": st.session_state.get("selected_language"),
-                            "task": st.session_state.get("selected_task", "transcribe"),
-                            "initial_prompt": st.session_state.get("initial_prompt"),
-                            "vad_filter": st.session_state.get("use_vad", True),
-                            "diarize": st.session_state.get("use_diarization", False),
-                            "num_speakers": st.session_state.get("num_speakers")
-                        }
-                    )
+                    if len(saved_paths) == 1:
+                        st.session_state.is_batch = False
+                        st.session_state.is_queue_batch = False
+                        st.session_state.current_file = saved_paths[0]
+                        t = threading.Thread(
+                            target=transcribe_file_threaded,
+                            kwargs={
+                                "file_path": saved_paths[0],
+                                "output_dir": output_dir,
+                                "profile": st.session_state.hw_profile,
+                                "progress_queue": st.session_state.progress_queue,
+                                "stop_event": st.session_state.stop_event,
+                                "model_size": st.session_state.selected_model,
+                                "language": st.session_state.get("selected_language"),
+                                "task": st.session_state.get("selected_task", "transcribe"),
+                                "initial_prompt": st.session_state.get("initial_prompt"),
+                                "vad_filter": st.session_state.get("use_vad", True),
+                                "diarize": st.session_state.get("use_diarization", False),
+                                "num_speakers": st.session_state.get("num_speakers")
+                            }
+                        )
+                    else:
+                        st.session_state.is_batch = True
+                        st.session_state.is_queue_batch = True
+                        st.session_state.total_batch_files = len(saved_paths)
+                        st.session_state.current_file_idx = 1
+                        st.session_state.current_file_name = saved_paths[0].name
+                        t = threading.Thread(
+                            target=transcribe_batch_threaded,
+                            kwargs={
+                                "files": saved_paths,
+                                "output_dir": output_dir,
+                                "profile": st.session_state.hw_profile,
+                                "progress_queue": st.session_state.progress_queue,
+                                "stop_event": st.session_state.stop_event,
+                                "model_size": st.session_state.selected_model,
+                                "export_srt": queue_export_srt,
+                                "export_md": queue_export_md,
+                                "language": st.session_state.get("selected_language"),
+                                "task": st.session_state.get("selected_task", "transcribe"),
+                                "initial_prompt": st.session_state.get("initial_prompt"),
+                                "vad_filter": st.session_state.get("use_vad", True),
+                                "diarize": st.session_state.get("use_diarization", False),
+                                "num_speakers": st.session_state.get("num_speakers")
+                            }
+                        )
+                        
                     add_script_run_ctx(t)
                     t.start()
                     st.rerun()
@@ -601,15 +697,16 @@ def main():
         col_bar, col_stop = st.columns([5, 1])
         with col_bar:
             if is_batch:
-                current_idx = st.session_state.get("current_file_idx", 0)
+                current_idx = st.session_state.get("current_file_idx", 1)
                 total_files = st.session_state.get("total_batch_files", 1)
                 file_name = st.session_state.get("current_file_name", "")
-                
-                batch_pct = int((current_idx / total_files) * 100) if total_files > 0 else 0
-                st.markdown(f"**Progression globale : Vidéo {current_idx} / {total_files}**")
-                st.progress(batch_pct)
-                
                 file_pct = int(st.session_state.get("progress_pct", 0))
+                
+                # Progression globale prenant en compte les fichiers terminés + l'avancement du fichier en cours
+                overall_progress = min(100, int((((current_idx - 1) + (file_pct / 100.0)) / total_files) * 100)) if total_files > 0 else 0
+                st.markdown(f"**Progression globale : Fichier {current_idx} / {total_files}** ({overall_progress}%)")
+                st.progress(overall_progress)
+                
                 st.markdown(f"Fichier en cours : `{file_name}` ({file_pct}%)")
                 st.progress(file_pct)
             else:
@@ -673,7 +770,8 @@ def main():
                 st.session_state.batch_stats = {
                     "total": msg.get("total_files", 0),
                     "processed": msg.get("processed", 0),
-                    "skipped": msg.get("skipped", 0)
+                    "skipped": msg.get("skipped", 0),
+                    "files": msg.get("files", [])
                 }
                 st.rerun()
             elif status == "error":
@@ -711,28 +809,164 @@ def main():
         
         if is_batch:
             stats = st.session_state.get("batch_stats", {})
-            st.success(":material/celebration: Transcription du dossier terminée avec succès !")
+            completed_files = stats.get("files", [])
+            is_queue = st.session_state.get("is_queue_batch", False)
+            
+            if is_queue:
+                st.success(":material/celebration: File d'attente multi-fichiers traitée avec succès !")
+            else:
+                st.success(":material/celebration: Transcription du dossier terminée avec succès !")
             
             col_b1, col_b2, col_b3 = st.columns(3)
             with col_b1:
-                ui.metric_card(label="Total Analysé", value=str(stats.get("total", 0)), description="Vidéos dans l'arborescence")
+                ui.metric_card(
+                    label="Total Analysé", 
+                    value=str(stats.get("total", len(completed_files))), 
+                    description="Fichiers traités dans la file" if is_queue else "Vidéos dans l'arborescence"
+                )
             with col_b2:
-                ui.metric_card(label="Nouvellement Transcrites", value=str(stats.get("processed", 0)), description="Fichiers .txt générés in-place")
+                ui.metric_card(
+                    label="Nouvellement Transcrites", 
+                    value=str(stats.get("processed", len(completed_files))), 
+                    description="Transcriptions générées"
+                )
             with col_b3:
-                ui.metric_card(label="Déjà Existantes", value=str(stats.get("skipped", 0)), description="Ignorées (Smart Resume)")
+                ui.metric_card(
+                    label="Déjà Existantes", 
+                    value=str(stats.get("skipped", 0)), 
+                    description="Ignorées (Smart Resume)"
+                )
                 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
-            folder_path = Path(st.session_state.target_folder)
-            st.markdown(f"Tous les fichiers **`.txt`** ont été enregistrés directement à côté de chaque vidéo dans :  \n`{folder_path.resolve()}`")
             
-            if st.button(":material/folder_open: Ouvrir le dossier dans l'explorateur Windows", type="primary"):
-                open_folder_in_explorer(folder_path)
+            # Détermination du dossier de destination
+            if not is_queue and st.session_state.get("target_folder"):
+                dest_dir = Path(st.session_state.target_folder)
+                st.markdown(f"Tous les fichiers ont été enregistrés directement dans :  \n`{dest_dir.resolve()}`")
+            else:
+                dest_dir = st.session_state.get("output_dir", PROJECT_ROOT / "output")
+                st.markdown(f"Tous les fichiers d'export ont été enregistrés dans :  \n`{dest_dir.resolve()}`")
+
+            # --- BARRE D'ACTIONS RAPIDES GLOBALES ---
+            col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
+            with col_act1:
+                if st.button(":material/folder_open: Ouvrir le dossier", type="secondary", use_container_width=True, key="btn_open_batch_dir"):
+                    open_folder_in_explorer(dest_dir)
+            
+            with col_act2:
+                zip_data = create_batch_zip(completed_files)
+                if zip_data:
+                    st.download_button(
+                        label="📦 Télécharger tout (.zip)",
+                        data=zip_data,
+                        file_name="transcriptions_lot.zip",
+                        mime="application/zip",
+                        type="primary",
+                        use_container_width=True,
+                        key="btn_dl_batch_zip"
+                    )
+                else:
+                    st.button("📦 Télécharger tout (.zip)", disabled=True, use_container_width=True, key="btn_dl_batch_zip_dis")
+                    
+            with col_act3:
+                all_text_combined = "\n\n".join([
+                    f"=== {cf.get('filename')} ===\n{cf.get('text', '')}"
+                    for cf in completed_files if cf.get("text")
+                ])
+                if st.button("📋 Copier tout le lot", type="secondary", use_container_width=True, key="btn_copy_all_batch", help="Copier l'ensemble des textes transcrits du lot"):
+                    if all_text_combined and copy_to_clipboard(all_text_combined):
+                        st.toast(f"{len(completed_files)} transcriptions copiées dans le presse-papier !", icon="📋")
+                    else:
+                        st.warning("Aucun texte à copier.")
+
+            # --- DÉTAIL ET APERÇU FICHIER PAR FICHIER ---
+            if completed_files:
+                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown(f"##### 📋 Fichiers transcrits ({len(completed_files)}) :")
                 
+                for idx, cf in enumerate(completed_files, start=1):
+                    cf_name = cf.get("filename", f"Fichier_{idx}")
+                    cf_dur = cf.get("duration")
+                    cf_dur_str = f"{int(cf_dur // 60)}m {int(cf_dur % 60):02d}s" if cf_dur else ""
+                    cf_lang = cf.get("language", "")
+                    cf_lang_disp = SUPPORTED_LANGUAGES.get(cf_lang, cf_lang.upper()) if cf_lang else ""
+                    cf_spk = cf.get("speakers") or []
+                    
+                    header_label = f"📄 {idx}. {cf_name}"
+                    if cf_dur_str:
+                        header_label += f" — {cf_dur_str}"
+                    if cf_lang_disp:
+                        header_label += f" ({cf_lang_disp})"
+                    if cf_spk:
+                        header_label += f" • {len(cf_spk)} locuteurs"
+                        
+                    with st.expander(header_label, expanded=(len(completed_files) == 1)):
+                        cf_text = cf.get("text", "")
+                        cf_txt_path = Path(cf.get("txt_path", "")) if cf.get("txt_path") else None
+                        cf_srt_path = Path(cf.get("srt_path", "")) if cf.get("srt_path") else None
+                        cf_md_path = Path(cf.get("md_path", "")) if cf.get("md_path") else None
+                        
+                        # Boutons d'action pour ce fichier
+                        col_fa_cp, col_fa_txt, col_fa_srt, col_fa_md = st.columns(4)
+                        with col_fa_cp:
+                            if st.button("📋 Copier", key=f"btn_cp_file_{idx}", use_container_width=True):
+                                if copy_to_clipboard(cf_text):
+                                    st.toast(f"'{cf_name}' copié !", icon="📋")
+                                else:
+                                    st.error("Échec copie")
+                        with col_fa_txt:
+                            if cf_txt_path and cf_txt_path.exists():
+                                txt_bytes = cf_txt_path.read_text(encoding="utf-8")
+                                st.download_button(
+                                    label=":material/download: .txt",
+                                    data=txt_bytes,
+                                    file_name=cf_txt_path.name,
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                    key=f"dl_txt_file_{idx}"
+                                )
+                        with col_fa_srt:
+                            if cf_srt_path and cf_srt_path.exists():
+                                srt_bytes = cf_srt_path.read_text(encoding="utf-8")
+                                st.download_button(
+                                    label="⏱️ .srt",
+                                    data=srt_bytes,
+                                    file_name=cf_srt_path.name,
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                    key=f"dl_srt_file_{idx}"
+                                )
+                        with col_fa_md:
+                            if cf_md_path and cf_md_path.exists():
+                                md_bytes = cf_md_path.read_text(encoding="utf-8")
+                                st.download_button(
+                                    label=":material/download: .md",
+                                    data=md_bytes,
+                                    file_name=cf_md_path.name,
+                                    mime="text/markdown",
+                                    use_container_width=True,
+                                    key=f"dl_md_file_{idx}"
+                                )
+                        
+                        if cf_text:
+                            st.text_area(
+                                label=f"Aperçu texte ({cf_name}) :",
+                                value=cf_text,
+                                height=140,
+                                key=f"ta_preview_{idx}",
+                                disabled=True
+                            )
+                        else:
+                            st.info("Aucun contenu textuel généré.")
+
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-            if st.button(":material/sync: Traiter un autre dossier", use_container_width=True):
+            reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
+            if st.button(reset_label, use_container_width=True, key="btn_reset_batch"):
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""
+                st.session_state.is_batch = False
+                st.session_state.is_queue_batch = False
                 st.rerun()
         else:
             st.success(":material/celebration: Transcription terminée avec succès !")

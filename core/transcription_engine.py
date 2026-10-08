@@ -228,10 +228,10 @@ def transcribe_file_threaded(
 
 
 def transcribe_batch_threaded(
-    target_dir: Path,
-    profile: HardwareProfile,
-    progress_queue: queue.Queue,
-    stop_event: threading.Event,
+    target_dir: Optional[Path] = None,
+    profile: Optional[HardwareProfile] = None,
+    progress_queue: Optional[queue.Queue] = None,
+    stop_event: Optional[threading.Event] = None,
     model_size: Optional[str] = None,
     export_srt: bool = False,
     export_md: bool = False,
@@ -240,55 +240,72 @@ def transcribe_batch_threaded(
     initial_prompt: Optional[str] = None,
     vad_filter: bool = True,
     diarize: bool = False,
-    num_speakers: Optional[int] = None
+    num_speakers: Optional[int] = None,
+    files: Optional[List[Path]] = None,
+    output_dir: Optional[Path] = None
 ) -> None:
     """
-    Transcription par lot récursive :
-    1. Scanne récursivement (rglob) tous les fichiers audio/vidéo du dossier et ses sous-dossiers.
-    2. Smart Resume : ignore les vidéos dont le fichier .txt existe déjà et est non-vide.
-    3. Écrit chaque transcription .txt directement dans le même dossier que la vidéo.
-    4. Utilise des écritures atomiques (.tmp -> .txt) pour éviter toute corruption.
+    Transcription par lot (file d'attente ou scan récursif) :
+    1. Si `files` est fourni : traite la liste exacte des fichiers déposés dans la file d'attente.
+       Si `target_dir` est fourni : scanne récursivement tous les fichiers média du dossier.
+    2. Charge le modèle Whisper en mémoire UNE SEULE FOIS pour toute la file d'attente.
+    3. Smart Resume : ignore les fichiers dont la transcription existe déjà.
+    4. Utilise des écritures atomiques (.tmp -> .txt/.srt/.md) dans le dossier de sortie approprié.
     5. Supporte la sélection de langue, traduction, prompt initial, VAD et diarisation.
+    6. Enregistre automatiquement chaque transcription dans la base SQLite d'historique.
     """
     try:
-        target_path = Path(target_dir).resolve()
-        if not target_path.exists() or not target_path.is_dir():
-            progress_queue.put({"status": "error", "error": f"Le dossier {target_dir} n'existe pas ou est invalide."})
-            return
+        # 1. Résolution de la liste des fichiers à traiter
+        if files:
+            all_files = [
+                Path(f).resolve() for f in files
+                if Path(f).is_file() and Path(f).suffix.lower() in SUPPORTED_EXTENSIONS
+            ]
+        elif target_dir:
+            target_path = Path(target_dir).resolve()
+            if not target_path.exists() or not target_path.is_dir():
+                progress_queue.put({"status": "error", "error": f"Le dossier {target_dir} n'existe pas ou est invalide."})
+                return
 
-        # 1. Recherche récursive de toutes les vidéos / audios
-        all_files = [
-            f for f in target_path.rglob("*")
-            if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-        ]
-        all_files.sort()
+            all_files = [
+                f for f in target_path.rglob("*")
+                if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+            ]
+            all_files.sort()
+        else:
+            progress_queue.put({"status": "error", "error": "Aucun fichier ou dossier spécifié pour le traitement."})
+            return
 
         total_files = len(all_files)
         if total_files == 0:
             progress_queue.put({
                 "status": "batch_empty",
-                "message": f"Aucun fichier vidéo ou audio supporté trouvé dans {target_path}."
+                "message": "Aucun fichier vidéo ou audio supporté trouvé dans la sélection."
             })
             return
 
         progress_queue.put({
             "status": "batch_discovered",
             "total_files": total_files,
-            "target_dir": str(target_path)
+            "target_dir": str(target_dir) if target_dir else str(output_dir or "")
         })
 
         # 2. Chargement unique du modèle en mémoire pour tout le lot
-        model_to_use = model_size if model_size else profile.recommended_model
+        model_to_use = model_size if model_size else (profile.recommended_model if profile else "small")
         progress_queue.put({"status": "loading_model", "model": model_to_use})
         
+        device = profile.device if profile else "cpu"
+        compute_type = profile.compute_type if profile else "int8"
+
         model = WhisperModel(
             model_to_use, 
-            device=profile.device, 
-            compute_type=profile.compute_type
+            device=device, 
+            compute_type=compute_type
         )
 
         processed_count = 0
         skipped_count = 0
+        completed_files = []
 
         # Instance de diarisation partagée si demandée
         diar_engine = None
@@ -296,15 +313,24 @@ def transcribe_batch_threaded(
             from core.diarization_engine import DiarizationEngine, assign_speakers_to_whisper_segments
             diar_engine = DiarizationEngine()
 
-        # 3. Boucle sur tous les fichiers
+        # 3. Boucle sur tous les fichiers de la file d'attente
         for idx, file_path in enumerate(all_files, start=1):
-            if stop_event.is_set():
+            if stop_event and stop_event.is_set():
                 progress_queue.put({"status": "stopped", "processed": processed_count, "skipped": skipped_count})
                 return
 
-            out_txt = file_path.with_suffix(".txt")
-            out_srt = file_path.with_suffix(".srt")
-            out_md = file_path.with_suffix(".md")
+            # Détermination du dossier de sortie
+            if output_dir:
+                dest_dir = Path(output_dir).resolve()
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                out_txt = dest_dir / f"{file_path.stem}.txt"
+                out_srt = dest_dir / f"{file_path.stem}.srt"
+                out_md = dest_dir / f"{file_path.stem}.md"
+            else:
+                dest_dir = file_path.parent
+                out_txt = file_path.with_suffix(".txt")
+                out_srt = file_path.with_suffix(".srt")
+                out_md = file_path.with_suffix(".md")
 
             # Smart Resume : si le .txt existe et est non vide, on passe
             if out_txt.exists() and out_txt.stat().st_size > 0:
@@ -327,7 +353,7 @@ def transcribe_batch_threaded(
                 "total_files": total_files
             })
 
-            # Inférence
+            # Inférence Whisper
             transcribe_kwargs = {
                 "beam_size": 5,
                 "task": task,
@@ -346,7 +372,7 @@ def transcribe_batch_threaded(
             segments = []
 
             for segment in segments_gen:
-                if stop_event.is_set():
+                if stop_event and stop_event.is_set():
                     progress_queue.put({"status": "stopped", "file": str(file_path)})
                     return
 
@@ -366,7 +392,7 @@ def transcribe_batch_threaded(
 
             # Diarisation batch optionnelle
             detected_speakers = []
-            if diar_engine and not stop_event.is_set():
+            if diar_engine and not (stop_event and stop_event.is_set()):
                 progress_queue.put({
                     "status": "diarizing",
                     "file": str(file_path),
@@ -386,24 +412,23 @@ def transcribe_batch_threaded(
                         "warning": f"Diarisation échouée sur {file_path.name}: {d_err}"
                     })
 
-            # 4. Écriture atomique dans le même dossier que la vidéo
-            tmp_txt = file_path.with_suffix(".txt.tmp")
+            # 4. Écriture atomique dans le dossier de destination
+            tmp_txt = dest_dir / f"{out_txt.name}.tmp"
             tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
-            
             if out_txt.exists():
                 out_txt.unlink()
             tmp_txt.rename(out_txt)
 
-            # Exports optionnels (.srt, .md) dans le même dossier
+            # Exports optionnels (.srt, .md)
             if export_srt:
-                tmp_srt = file_path.with_suffix(".srt.tmp")
+                tmp_srt = dest_dir / f"{out_srt.name}.tmp"
                 tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
                 if out_srt.exists():
                     out_srt.unlink()
                 tmp_srt.rename(out_srt)
 
             if export_md:
-                tmp_md = file_path.with_suffix(".md.tmp")
+                tmp_md = dest_dir / f"{out_md.name}.tmp"
                 metadata = {
                     "filename": file_path.name,
                     "duration": duration,
@@ -418,6 +443,8 @@ def transcribe_batch_threaded(
                     out_md.unlink()
                 tmp_md.rename(out_md)
 
+            txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else ""
+
             # Enregistrement automatique dans l'historique SQLite
             try:
                 from core.history_manager import add_record
@@ -430,7 +457,7 @@ def transcribe_batch_threaded(
                     "task": task,
                     "model": model_to_use,
                     "speakers": detected_speakers if detected_speakers else None,
-                    "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else "",
+                    "transcript_text": txt_text_content,
                     "txt_path": str(out_txt),
                     "md_path": str(out_md) if export_md else "",
                     "srt_path": str(out_srt) if export_srt else ""
@@ -439,14 +466,33 @@ def transcribe_batch_threaded(
                 pass
 
             processed_count += 1
+            completed_info = {
+                "file_path": str(file_path),
+                "filename": file_path.name,
+                "duration": duration,
+                "language": detected_lang,
+                "language_probability": lang_prob,
+                "speakers": detected_speakers,
+                "txt_path": str(out_txt),
+                "srt_path": str(out_srt) if export_srt else "",
+                "md_path": str(out_md) if export_md else "",
+                "text": txt_text_content
+            }
+            completed_files.append(completed_info)
+
             progress_queue.put({
                 "status": "file_complete",
                 "file": str(file_path),
                 "file_name": file_path.name,
                 "txt_path": str(out_txt),
+                "srt_path": str(out_srt) if export_srt else "",
+                "md_path": str(out_md) if export_md else "",
                 "current_idx": idx,
                 "total_files": total_files,
-                "speakers": detected_speakers
+                "speakers": detected_speakers,
+                "duration": duration,
+                "language": detected_lang,
+                "language_probability": lang_prob
             })
 
         # 5. Fin du traitement par lot
@@ -454,7 +500,8 @@ def transcribe_batch_threaded(
             "status": "batch_complete",
             "total_files": total_files,
             "processed": processed_count,
-            "skipped": skipped_count
+            "skipped": skipped_count,
+            "files": completed_files
         })
 
     except Exception as e:
