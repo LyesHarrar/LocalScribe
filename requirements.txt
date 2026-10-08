@@ -12,6 +12,9 @@ requests>=2.31.0
 pyinstaller>=6.0.0
 pillow>=10.0.0
 
+# Diarisation — Identification des locuteurs (100% Hors-Ligne & ONNX)
+sherpa-onnx>=1.10.28
+
 # Utilitaires
 pyperclip>=1.9.0
 

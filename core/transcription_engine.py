@@ -1,7 +1,8 @@
 """
 Moteur de transcription de LocalScribe.
 Gère l'inférence via faster-whisper, le threading non-bloquant,
-la recherche récursive de fichiers (batch) et l'écriture atomique (Smart Resume).
+la recherche récursive de fichiers (batch), l'écriture atomique (Smart Resume)
+et l'identification des locuteurs (Speaker Diarization).
 """
 
 import os
@@ -61,11 +62,21 @@ def transcribe_file_threaded(
     language: Optional[str] = None,
     task: str = "transcribe",
     initial_prompt: Optional[str] = None,
-    vad_filter: bool = True
-):
+    vad_filter: bool = True,
+    diarize: bool = False,
+    num_speakers: Optional[int] = None
+) -> None:
     """
-    Transcription d'un fichier individuel avec file de messages et écriture atomique (.tmp).
-    Supporte la sélection de langue, la traduction (task="translate"), le prompt initial et le filtre VAD.
+    Transcrit un fichier unique en arrière-plan.
+    Émet des événements dans progress_queue :
+    - 'loading_model'
+    - 'starting'
+    - 'info_detected' (langue détectée, certitude, durée)
+    - 'progress' (pourcentage, temps courant, texte du segment)
+    - 'diarizing' (analyse des locuteurs)
+    - 'file_complete'
+    - 'error'
+    - 'stopped'
     """
     try:
         model_to_use = model_size if model_size else profile.recommended_model
@@ -122,6 +133,34 @@ def transcribe_file_threaded(
                 "duration": duration,
                 "segment_text": segment.text
             })
+
+        # Diarisation optionnelle des locuteurs
+        detected_speakers = []
+        if diarize and not stop_event.is_set():
+            progress_queue.put({
+                "status": "diarizing",
+                "file": str(file_path),
+                "message": "Identification des locuteurs en cours..."
+            })
+            try:
+                from core.diarization_engine import DiarizationEngine, assign_speakers_to_whisper_segments
+                diar_engine = DiarizationEngine()
+                diar_segments = diar_engine.diarize(
+                    audio_path=file_path,
+                    num_speakers=num_speakers,
+                    status_callback=lambda msg: progress_queue.put({
+                        "status": "diarizing",
+                        "file": str(file_path),
+                        "message": msg
+                    })
+                )
+                segments, detected_speakers = assign_speakers_to_whisper_segments(segments, diar_segments)
+            except Exception as d_err:
+                progress_queue.put({
+                    "status": "warning",
+                    "file": str(file_path),
+                    "warning": f"Diarisation impossible: {d_err}"
+                })
             
         output_dir.mkdir(parents=True, exist_ok=True)
         base_name = file_path.stem
@@ -140,7 +179,8 @@ def transcribe_file_threaded(
             "language": detected_lang,
             "language_probability": f"{lang_prob}%",
             "task": task,
-            "model": model_to_use
+            "model": model_to_use,
+            "speakers": detected_speakers if detected_speakers else None
         }
         
         # Écritures atomiques
@@ -159,7 +199,8 @@ def transcribe_file_threaded(
             "output_dir": str(output_dir),
             "language": detected_lang,
             "language_probability": lang_prob,
-            "task": task
+            "task": task,
+            "speakers": detected_speakers
         })
         
     except Exception as e:
@@ -177,15 +218,17 @@ def transcribe_batch_threaded(
     language: Optional[str] = None,
     task: str = "transcribe",
     initial_prompt: Optional[str] = None,
-    vad_filter: bool = True
-):
+    vad_filter: bool = True,
+    diarize: bool = False,
+    num_speakers: Optional[int] = None
+) -> None:
     """
     Transcription par lot récursive :
     1. Scanne récursivement (rglob) tous les fichiers audio/vidéo du dossier et ses sous-dossiers.
     2. Smart Resume : ignore les vidéos dont le fichier .txt existe déjà et est non-vide.
     3. Écrit chaque transcription .txt directement dans le même dossier que la vidéo.
     4. Utilise des écritures atomiques (.tmp -> .txt) pour éviter toute corruption.
-    5. Supporte la sélection de langue, traduction, prompt initial et VAD.
+    5. Supporte la sélection de langue, traduction, prompt initial, VAD et diarisation.
     """
     try:
         target_path = Path(target_dir).resolve()
@@ -199,8 +242,8 @@ def transcribe_batch_threaded(
             if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
         ]
         all_files.sort()
-        total_files = len(all_files)
 
+        total_files = len(all_files)
         if total_files == 0:
             progress_queue.put({
                 "status": "batch_empty",
@@ -226,6 +269,12 @@ def transcribe_batch_threaded(
 
         processed_count = 0
         skipped_count = 0
+
+        # Instance de diarisation partagée si demandée
+        diar_engine = None
+        if diarize:
+            from core.diarization_engine import DiarizationEngine, assign_speakers_to_whisper_segments
+            diar_engine = DiarizationEngine()
 
         # 3. Boucle sur tous les fichiers
         for idx, file_path in enumerate(all_files, start=1):
@@ -295,6 +344,28 @@ def transcribe_batch_threaded(
                     "segment_text": segment.text
                 })
 
+            # Diarisation batch optionnelle
+            detected_speakers = []
+            if diar_engine and not stop_event.is_set():
+                progress_queue.put({
+                    "status": "diarizing",
+                    "file": str(file_path),
+                    "file_name": file_path.name,
+                    "message": f"Diarisation de {file_path.name}..."
+                })
+                try:
+                    diar_segments = diar_engine.diarize(
+                        audio_path=file_path,
+                        num_speakers=num_speakers
+                    )
+                    segments, detected_speakers = assign_speakers_to_whisper_segments(segments, diar_segments)
+                except Exception as d_err:
+                    progress_queue.put({
+                        "status": "warning",
+                        "file": str(file_path),
+                        "warning": f"Diarisation échouée sur {file_path.name}: {d_err}"
+                    })
+
             # 4. Écriture atomique dans le même dossier que la vidéo
             tmp_txt = file_path.with_suffix(".txt.tmp")
             tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
@@ -319,7 +390,8 @@ def transcribe_batch_threaded(
                     "language": detected_lang,
                     "language_probability": f"{lang_prob}%",
                     "task": task,
-                    "model": model_to_use
+                    "model": model_to_use,
+                    "speakers": detected_speakers if detected_speakers else None
                 }
                 tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")
                 if out_md.exists():
@@ -333,7 +405,8 @@ def transcribe_batch_threaded(
                 "file_name": file_path.name,
                 "txt_path": str(out_txt),
                 "current_idx": idx,
-                "total_files": total_files
+                "total_files": total_files,
+                "speakers": detected_speakers
             })
 
         # 5. Fin du traitement par lot

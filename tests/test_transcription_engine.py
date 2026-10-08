@@ -266,6 +266,133 @@ class TestTranscriptionEngine(unittest.TestCase):
             self.assertEqual(kwargs.get("initial_prompt"), "LocalScribe, Kubernetes")
             self.assertEqual(kwargs.get("vad_filter"), False)
 
+    @patch("core.diarization_engine.DiarizationEngine")
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_diarization(self, mock_whisper_class, mock_diar_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+                
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.98
+            
+        mock_model.transcribe.return_value = (
+            [
+                DummySegment(0.0, 4.0, "Bonjour"),
+                DummySegment(4.5, 9.0, "Salut")
+            ], 
+            DummyInfo()
+        )
+        
+        from core.diarization_engine import DiarizationSegment
+        mock_diar_instance = MagicMock()
+        mock_diar_class.return_value = mock_diar_instance
+        mock_diar_instance.diarize.return_value = [
+            DiarizationSegment(0.0, 4.2, 0, "Locuteur 1"),
+            DiarizationSegment(4.3, 9.1, 1, "Locuteur 2")
+        ]
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            out_dir = tmp_path / "out"
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                diarize=True,
+                num_speakers=2
+            )
+            
+            mock_diar_instance.diarize.assert_called_once()
+            _, kwargs = mock_diar_instance.diarize.call_args
+            self.assertEqual(kwargs.get("num_speakers"), 2)
+            
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+                
+            statuses = [m["status"] for m in messages]
+            self.assertIn("diarizing", statuses)
+            complete_msg = next(m for m in messages if m["status"] == "file_complete")
+            self.assertEqual(complete_msg["speakers"], ["Locuteur 1", "Locuteur 2"])
+            
+            # Vérifier le fichier Markdown généré
+            md_file = out_dir / "audio.md"
+            self.assertTrue(md_file.exists())
+            content = md_file.read_text(encoding="utf-8")
+            self.assertIn('speakers: ["Locuteur 1", "Locuteur 2"]', content)
+            self.assertIn("**Locuteur 1** : Bonjour", content)
+            self.assertIn("**Locuteur 2** : Salut", content)
+
+    @patch("core.diarization_engine.DiarizationEngine")
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_with_diarization(self, mock_whisper_class, mock_diar_class):
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+                
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.95
+            
+        mock_model.transcribe.return_value = (
+            [DummySegment(0.0, 3.0, "Segment batch")],
+            DummyInfo()
+        )
+        
+        from core.diarization_engine import DiarizationSegment
+        mock_diar_instance = MagicMock()
+        mock_diar_class.return_value = mock_diar_instance
+        mock_diar_instance.diarize.return_value = [
+            DiarizationSegment(0.0, 3.0, 0, "Locuteur 1")
+        ]
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            v1 = root / "video.mp4"
+            v1.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                target_dir=root,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                diarize=True,
+                export_md=True
+            )
+            
+            mock_diar_instance.diarize.assert_called_once()
+            
+            md_file = root / "video.md"
+            self.assertTrue(md_file.exists())
+            self.assertIn('speakers: ["Locuteur 1"]', md_file.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
 

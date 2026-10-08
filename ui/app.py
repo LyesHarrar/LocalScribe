@@ -162,6 +162,31 @@ def render_sidebar():
         )
         st.session_state.initial_prompt = initial_prompt.strip() if initial_prompt else None
 
+        # 5. Diarisation des locuteurs (Identification qui parle)
+        use_diarization = st.checkbox(
+            "🗣️ Identifier les locuteurs (Diarisation)",
+            value=False,
+            help="Distingue les voix et attribue chaque segment à un interlocuteur distinct (ex: Locuteur 1, Locuteur 2)."
+        )
+        st.session_state.use_diarization = use_diarization
+
+        num_speakers = None
+        if use_diarization:
+            speaker_choice = st.radio(
+                "Nombre d'interlocuteurs :",
+                options=["Auto-détection", "Nombre exact"],
+                horizontal=True
+            )
+            if speaker_choice == "Nombre exact":
+                num_speakers = st.number_input(
+                    "Nombre de locuteurs :",
+                    min_value=1,
+                    max_value=10,
+                    value=2,
+                    step=1
+                )
+        st.session_state.num_speakers = num_speakers
+
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
         <div style="background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 0.85rem;">
@@ -324,7 +349,9 @@ def main():
                                 "language": st.session_state.get("selected_language"),
                                 "task": st.session_state.get("selected_task", "transcribe"),
                                 "initial_prompt": st.session_state.get("initial_prompt"),
-                                "vad_filter": st.session_state.get("use_vad", True)
+                                "vad_filter": st.session_state.get("use_vad", True),
+                                "diarize": st.session_state.get("use_diarization", False),
+                                "num_speakers": st.session_state.get("num_speakers")
                             }
                         )
                         add_script_run_ctx(t)
@@ -380,7 +407,9 @@ def main():
                             "language": st.session_state.get("selected_language"),
                             "task": st.session_state.get("selected_task", "transcribe"),
                             "initial_prompt": st.session_state.get("initial_prompt"),
-                            "vad_filter": st.session_state.get("use_vad", True)
+                            "vad_filter": st.session_state.get("use_vad", True),
+                            "diarize": st.session_state.get("use_diarization", False),
+                            "num_speakers": st.session_state.get("num_speakers")
                         }
                     )
                     add_script_run_ctx(t)
@@ -448,6 +477,8 @@ def main():
                 st.session_state.current_file_name = msg.get("file_name", st.session_state.get("current_file_name", ""))
                 st.session_state.current_file_idx = msg.get("current_idx", st.session_state.get("current_file_idx", 1))
                 st.session_state.latest_text += " " + msg.get("segment_text", "")
+            elif status == "diarizing":
+                st.session_state.status_label = msg.get("message", "🗣️ Identification des locuteurs...")
             elif status == "file_complete":
                 if not is_batch:
                     st.session_state.is_processing = False
@@ -459,6 +490,7 @@ def main():
                         st.session_state.language_probability = msg.get("language_probability")
                     if msg.get("task"):
                         st.session_state.executed_task = msg.get("task")
+                    st.session_state.detected_speakers = msg.get("speakers", [])
                     st.rerun()
             elif status == "batch_complete":
                 st.session_state.is_processing = False
@@ -541,18 +573,61 @@ def main():
             srt_text = srt_file.read_text(encoding="utf-8") if srt_file.exists() else ""
 
             # Résumé des métriques IA et audio
-            col_res1, col_res2, col_res3 = st.columns(3)
+            speakers = st.session_state.get("detected_speakers", [])
             lang_code = st.session_state.get("detected_language", "auto")
             lang_label = SUPPORTED_LANGUAGES.get(lang_code, lang_code.upper() if lang_code else "AUTO")
             prob_val = st.session_state.get("language_probability", 100.0)
             task_type = "Traduction (EN)" if st.session_state.get("executed_task") == "translate" else "Transcription"
-            
-            with col_res1:
-                ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
-            with col_res2:
-                ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
-            with col_res3:
-                ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+
+            if speakers:
+                col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+                with col_res1:
+                    ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
+                with col_res2:
+                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
+                with col_res3:
+                    ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                with col_res4:
+                    ui.metric_card(label="Locuteurs", value=f"{len(speakers)} voix", description=", ".join(speakers[:2]))
+            else:
+                col_res1, col_res2, col_res3 = st.columns(3)
+                with col_res1:
+                    ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
+                with col_res2:
+                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
+                with col_res3:
+                    ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+
+            st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
+
+            # Option interactive : personnalisation des locuteurs
+            if speakers:
+                with st.expander("👥 Personnaliser les noms des locuteurs", expanded=False):
+                    st.markdown("<p style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.5rem;'>Attribuez les vrais prénoms des intervenants (ex: <em>Alice</em>, <em>Bob</em>) pour mettre à jour tous les exports instantanément.</p>", unsafe_allow_html=True)
+                    renames = {}
+                    cols_spk = st.columns(min(len(speakers), 4))
+                    for i, spk in enumerate(speakers):
+                        with cols_spk[i % 4]:
+                            renames[spk] = st.text_input(
+                                f"Nom pour {spk} :", 
+                                value=st.session_state.get(f"rename_{spk}", spk),
+                                key=f"rename_input_{spk}"
+                            )
+                    
+                    if st.button("💾 Appliquer les noms aux fichiers", key="btn_apply_renames"):
+                        for old_name, new_name in renames.items():
+                            clean_new = new_name.strip()
+                            if clean_new and clean_new != old_name:
+                                txt_text = txt_text.replace(f"[{old_name}]", f"[{clean_new}]")
+                                srt_text = srt_text.replace(f"[{old_name}]", f"[{clean_new}]")
+                                md_text = md_text.replace(f"**{old_name}**", f"**{clean_new}**")
+                                md_text = md_text.replace(f'"{old_name}"', f'"{clean_new}"')
+                                st.session_state[f"rename_{old_name}"] = clean_new
+                        txt_file.write_text(txt_text, encoding="utf-8")
+                        md_file.write_text(md_text, encoding="utf-8")
+                        srt_file.write_text(srt_text, encoding="utf-8")
+                        st.success("Tous les fichiers et aperçus ont été mis à jour !")
+                        st.rerun()
                 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
             
