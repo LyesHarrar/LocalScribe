@@ -56,4 +56,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.5 — Copie Presse-Papier 1-Clic** : *Implémentée et validée (module core/clipboard.py multi-plateforme avec replis pyperclip/Win32 ctypes/PowerShell/pbcopy/wl-copy, boutons d'action rapide dans l'UI résultats, dans chaque onglet TXT/MD/SRT, dans les templates LLM et dans chaque fiche de l'historique, 53/53 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.5 prête pour fusion (PR).*
+*Dernière mise à jour par l'Agent : Version 1.5 mergée avec succès sur main.*
