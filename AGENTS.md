@@ -54,4 +54,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.3 — Historique Persistant & Recherche (SQLite)** : *Implémentée et validée (persistance automatique mono/batch, recherche textuelle plein champ, consultation et téléchargements rétroactifs, suppression/nettoyage, 36/36 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.3 terminée et validée sur feature/v1.3-transcription-history.*
+*Dernière mise à jour par l'Agent : Version 1.3 mergée avec succès sur main.*
