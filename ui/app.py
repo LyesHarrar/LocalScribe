@@ -46,6 +46,13 @@ from core.text_formatter import TranscriptionSegment, parse_srt
 from core.audio_preprocessor import is_ffmpeg_available
 from core.eta_calculator import format_friendly_duration
 from core.notifications import notify_transcription_complete, notify_batch_complete
+from core.version import (
+    __version__,
+    __author__,
+    __github_repo__,
+    __github_author__,
+    check_for_updates,
+)
 from ui.editor_component import render_editor_tab
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
@@ -315,10 +322,14 @@ def render_sidebar():
         st.session_state.enable_chime = enable_chime
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
-        st.markdown("""
+        st.markdown(f"""
         <div style="background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 0.85rem;">
             <div style="font-weight: 600; color: #38bdf8; font-size: 0.82rem;">🛡️ Confidentialité Absolue</div>
             <div style="color: #a1a1aa; font-size: 0.75rem; margin-top: 0.2rem;">Aucun appel réseau. Zéro donnée partagée. Inférence 100% exécutée sur vos puces locales.</div>
+            <div style="border-top: 1px solid #27272a; margin-top: 0.6rem; padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #71717a; font-size: 0.73rem;">LocalScribe v{__version__} • {__author__}</span>
+                <a href="{__github_repo__}" target="_blank" style="color: #60a5fa; font-size: 0.73rem; text-decoration: none; font-weight: 500;">GitHub ↗</a>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -575,19 +586,68 @@ def main():
     render_sidebar()
     
     # En-tête Principal de l'Application
-    st.markdown("""
-    <div style="margin-bottom: 0.8rem;">
-        <h1 style="font-size: 2.2rem; font-weight: 800; letter-spacing: -0.035em; margin: 0; background: linear-gradient(135deg, #ffffff 40%, #93c5fd 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">LocalScribe</h1>
-        <p style="color: #94a3b8; font-size: 0.95rem; margin-top: 0.25rem; margin-bottom: 0;">Transcription audio & vidéo 100 % locale, privée et propulsée par faster-whisper.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    col_header_title, col_header_actions = st.columns([3.8, 1.4], vertical_alignment="center")
     
-    badges_html = (
-        render_badge(":material/lock: Zéro Réseau", color="#38bdf8", bg="rgba(56, 189, 248, 0.1)") +
-        render_badge(":material/folder: Batch In-Place", color="#60a5fa", bg="rgba(46, 116, 253, 0.1)") +
-        render_badge(":material/bolt: Accélération RTX CUDA", color="#34d399", bg="rgba(52, 211, 153, 0.1)")
-    )
-    st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
+    with col_header_title:
+        st.markdown(f"""
+        <div style="margin-bottom: 0.4rem;">
+            <div style="display: flex; align-items: baseline; gap: 0.6rem;">
+                <h1 style="font-size: 2.2rem; font-weight: 800; letter-spacing: -0.035em; margin: 0; background: linear-gradient(135deg, #ffffff 40%, #93c5fd 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">LocalScribe</h1>
+                <span style="background: rgba(46, 116, 253, 0.15); color: #60a5fa; border: 1px solid rgba(46, 116, 253, 0.35); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;">v{__version__}</span>
+            </div>
+            <p style="color: #94a3b8; font-size: 0.93rem; margin-top: 0.2rem; margin-bottom: 0;">
+                Transcription audio & vidéo 100 % locale et privée • Conçu par <strong style="color: #e2e8f0;">{__author__}</strong>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        badges_html = (
+            render_badge(":material/lock: Zéro Réseau", color="#38bdf8", bg="rgba(56, 189, 248, 0.1)") +
+            render_badge(":material/folder: Batch In-Place", color="#60a5fa", bg="rgba(46, 116, 253, 0.1)") +
+            render_badge(":material/bolt: Accélération RTX CUDA", color="#34d399", bg="rgba(52, 211, 153, 0.1)")
+        )
+        st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
+
+    with col_header_actions:
+        col_act_pop, col_act_git = st.columns([1.1, 1])
+        with col_act_pop:
+            with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
+                st.markdown(f"### LocalScribe `v{__version__}`")
+                st.markdown(f"**Développé par :** [{__author__}]({__github_author__})")
+                st.markdown(f"**Dépôt officiel :** [{__github_repo__.replace('https://', '')}]({__github_repo__})")
+                st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
+                st.divider()
+                
+                st.markdown("#### 🔄 Mises à jour")
+                if "update_info" not in st.session_state:
+                    st.session_state.update_info = None
+                    
+                if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
+                    with st.spinner("Vérification sur GitHub Releases..."):
+                        st.session_state.update_info = check_for_updates()
+                        
+                up_info = st.session_state.update_info
+                if up_info:
+                    if up_info["status"] == "up_to_date":
+                        st.success(f"✅ {up_info['message']}")
+                    elif up_info["status"] == "update_available":
+                        st.info(f"🚀 **Nouvelle version {up_info['latest_version']} disponible !**")
+                        if up_info.get("release_notes"):
+                            with st.expander("Notes de version (Changelog)"):
+                                st.markdown(up_info["release_notes"])
+                        st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
+                    elif up_info["status"] == "no_release":
+                        st.info(f"ℹ️ {up_info['message']}")
+                    elif up_info["status"] == "offline":
+                        st.warning(f"🌐 {up_info['message']}")
+                    else:
+                        st.caption(f"⚠️ {up_info['message']}")
+                        
+                st.divider()
+                st.caption("Licence MIT • 100% Open-Source & Gratuit")
+                
+        with col_act_git:
+            st.link_button("⭐ GitHub", __github_repo__, use_container_width=True)
     
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
