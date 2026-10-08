@@ -29,16 +29,43 @@ SUPPORTED_EXTENSIONS: Set[str] = {
     ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"
 }
 
+SUPPORTED_LANGUAGES = {
+    "auto": "🌐 Détection automatique",
+    "fr": "🇫🇷 Français",
+    "en": "🇬🇧 Anglais",
+    "es": "🇪🇸 Espagnol",
+    "de": "🇩🇪 Allemand",
+    "it": "🇮🇹 Italien",
+    "pt": "🇵🇹 Portugais",
+    "nl": "🇳🇱 Néerlandais",
+    "ru": "🇷🇺 Russe",
+    "zh": "🇨🇳 Chinois",
+    "ja": "🇯🇵 Japonais",
+    "ar": "🇸🇦 Arabe",
+    "ko": "🇰🇷 Coréen",
+    "hi": "🇮🇳 Hindi",
+    "tr": "🇹🇷 Turc",
+    "pl": "🇵🇱 Polonais",
+    "uk": "🇺🇦 Ukrainien",
+    "sv": "🇸🇪 Suédois",
+    "vi": "🇻🇳 Vietnamien",
+}
+
 def transcribe_file_threaded(
     file_path: Path,
     output_dir: Path,
     profile: HardwareProfile,
     progress_queue: queue.Queue,
     stop_event: threading.Event,
-    model_size: Optional[str] = None
+    model_size: Optional[str] = None,
+    language: Optional[str] = None,
+    task: str = "transcribe",
+    initial_prompt: Optional[str] = None,
+    vad_filter: bool = True
 ):
     """
     Transcription d'un fichier individuel avec file de messages et écriture atomique (.tmp).
+    Supporte la sélection de langue, la traduction (task="translate"), le prompt initial et le filtre VAD.
     """
     try:
         model_to_use = model_size if model_size else profile.recommended_model
@@ -53,11 +80,33 @@ def transcribe_file_threaded(
         
         progress_queue.put({"status": "starting", "file": str(file_path)})
         
-        segments_gen, info = model.transcribe(str(file_path), beam_size=5)
-        duration = info.duration
-        language = info.language
+        transcribe_kwargs = {
+            "beam_size": 5,
+            "task": task,
+            "vad_filter": vad_filter
+        }
+        if language and language != "auto":
+            transcribe_kwargs["language"] = language
+        if initial_prompt and initial_prompt.strip():
+            transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
+
+        segments_gen, info = model.transcribe(str(file_path), **transcribe_kwargs)
+        duration = getattr(info, "duration", 0.0)
+        detected_lang = getattr(info, "language", language or "auto")
+        raw_prob = getattr(info, "language_probability", 1.0)
+        lang_prob = round(raw_prob * 100, 1) if raw_prob is not None else 100.0
+
+        # Émission des informations audio détectées
+        progress_queue.put({
+            "status": "info_detected",
+            "file": str(file_path),
+            "language": detected_lang,
+            "language_probability": lang_prob,
+            "duration": duration,
+            "task": task
+        })
+
         segments = []
-        
         for segment in segments_gen:
             if stop_event.is_set():
                 progress_queue.put({"status": "stopped", "file": str(file_path)})
@@ -88,7 +137,9 @@ def transcribe_file_threaded(
         metadata = {
             "filename": file_path.name,
             "duration": duration,
-            "language": language,
+            "language": detected_lang,
+            "language_probability": f"{lang_prob}%",
+            "task": task,
             "model": model_to_use
         }
         
@@ -105,7 +156,10 @@ def transcribe_file_threaded(
         progress_queue.put({
             "status": "file_complete",
             "file": str(file_path),
-            "output_dir": str(output_dir)
+            "output_dir": str(output_dir),
+            "language": detected_lang,
+            "language_probability": lang_prob,
+            "task": task
         })
         
     except Exception as e:
@@ -119,7 +173,11 @@ def transcribe_batch_threaded(
     stop_event: threading.Event,
     model_size: Optional[str] = None,
     export_srt: bool = False,
-    export_md: bool = False
+    export_md: bool = False,
+    language: Optional[str] = None,
+    task: str = "transcribe",
+    initial_prompt: Optional[str] = None,
+    vad_filter: bool = True
 ):
     """
     Transcription par lot récursive :
@@ -127,6 +185,7 @@ def transcribe_batch_threaded(
     2. Smart Resume : ignore les vidéos dont le fichier .txt existe déjà et est non-vide.
     3. Écrit chaque transcription .txt directement dans le même dossier que la vidéo.
     4. Utilise des écritures atomiques (.tmp -> .txt) pour éviter toute corruption.
+    5. Supporte la sélection de langue, traduction, prompt initial et VAD.
     """
     try:
         target_path = Path(target_dir).resolve()
@@ -200,9 +259,21 @@ def transcribe_batch_threaded(
             })
 
             # Inférence
-            segments_gen, info = model.transcribe(str(file_path), beam_size=5)
-            duration = info.duration
-            language = info.language
+            transcribe_kwargs = {
+                "beam_size": 5,
+                "task": task,
+                "vad_filter": vad_filter
+            }
+            if language and language != "auto":
+                transcribe_kwargs["language"] = language
+            if initial_prompt and initial_prompt.strip():
+                transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
+
+            segments_gen, info = model.transcribe(str(file_path), **transcribe_kwargs)
+            duration = getattr(info, "duration", 0.0)
+            detected_lang = getattr(info, "language", language or "auto")
+            raw_prob = getattr(info, "language_probability", 1.0)
+            lang_prob = round(raw_prob * 100, 1) if raw_prob is not None else 100.0
             segments = []
 
             for segment in segments_gen:
@@ -245,7 +316,9 @@ def transcribe_batch_threaded(
                 metadata = {
                     "filename": file_path.name,
                     "duration": duration,
-                    "language": language,
+                    "language": detected_lang,
+                    "language_probability": f"{lang_prob}%",
+                    "task": task,
                     "model": model_to_use
                 }
                 tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")

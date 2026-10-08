@@ -56,9 +56,11 @@ class TestTranscriptionEngine(unittest.TestCase):
                 
             self.assertEqual(messages[0]["status"], "loading_model")
             self.assertEqual(messages[1]["status"], "starting")
-            self.assertEqual(messages[2]["status"], "progress")
-            self.assertEqual(messages[2]["percentage"], 50.0)
-            self.assertEqual(messages[3]["status"], "file_complete")
+            self.assertEqual(messages[2]["status"], "info_detected")
+            self.assertEqual(messages[2]["language"], "fr")
+            self.assertEqual(messages[3]["status"], "progress")
+            self.assertEqual(messages[3]["percentage"], 50.0)
+            self.assertEqual(messages[4]["status"], "file_complete")
             
             # Vérification de la création effective des fichiers
             self.assertTrue((out_dir / "audio.txt").exists())
@@ -191,5 +193,79 @@ class TestTranscriptionEngine(unittest.TestCase):
             # Whisper ne doit même pas avoir été appelé
             mock_model.transcribe.assert_not_called()
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_language_and_task(self, mock_whisper_class):
+        """Vérifie que language et task="translate" sont bien transmis à model.transcribe."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 10.0
+            language = "es"
+            language_probability = 0.98
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                language="es",
+                task="translate"
+            )
+            
+            mock_model.transcribe.assert_called_once()
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("language"), "es")
+            self.assertEqual(kwargs.get("task"), "translate")
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_prompt_and_vad(self, mock_whisper_class):
+        """Vérifie que initial_prompt et vad_filter sont bien transmis."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 5.0
+            language = "en"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                initial_prompt="LocalScribe, Kubernetes",
+                vad_filter=False
+            )
+            
+            _, kwargs = mock_model.transcribe.call_args
+            self.assertEqual(kwargs.get("initial_prompt"), "LocalScribe, Kubernetes")
+            self.assertEqual(kwargs.get("vad_filter"), False)
+
 if __name__ == "__main__":
     unittest.main()
+

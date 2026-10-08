@@ -29,7 +29,8 @@ from core.hardware_profiler import detect_hardware
 from core.transcription_engine import (
     transcribe_file_threaded, 
     transcribe_batch_threaded, 
-    SUPPORTED_EXTENSIONS
+    SUPPORTED_EXTENSIONS,
+    SUPPORTED_LANGUAGES
 )
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
@@ -120,7 +121,48 @@ def render_sidebar():
         st.session_state.selected_model = selected_model
         st.caption(f"Recommandation système : `{profile.recommended_model}`")
         
-        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("### :material/tune: Options Audio & IA")
+
+        # 1. Tâche
+        task_choice = st.radio(
+            "Tâche :",
+            options=["🎙️ Transcrire", "🌐 Traduire vers l'anglais"],
+            index=0,
+            help="'Transcrire' préserve la langue originale. 'Traduire vers l'anglais' traduit directement le texte en anglais."
+        )
+        st.session_state.selected_task = "translate" if "Traduire" in task_choice else "transcribe"
+
+        # 2. Langue source
+        lang_keys = list(SUPPORTED_LANGUAGES.keys())
+        lang_labels = list(SUPPORTED_LANGUAGES.values())
+        selected_lang_label = st.selectbox(
+            "Langue source :",
+            options=lang_labels,
+            index=0,
+            help="Langue parlée dans l'audio. Laissez sur Détection automatique si vous hésitez."
+        )
+        selected_lang_code = lang_keys[lang_labels.index(selected_lang_label)]
+        st.session_state.selected_language = None if selected_lang_code == "auto" else selected_lang_code
+
+        # 3. Filtre VAD (Voice Activity Detection)
+        use_vad = st.checkbox(
+            "Filtrer les silences (Silero VAD)",
+            value=True,
+            help="Supprime les silences pour accélérer le traitement et éliminer les hallucinations."
+        )
+        st.session_state.use_vad = use_vad
+
+        # 4. Vocabulaire spécifique / Noms propres
+        initial_prompt = st.text_input(
+            "Vocabulaire & Acronymes (Optionnel) :",
+            value="",
+            placeholder="ex: LocalScribe, Whisper, Kubernetes...",
+            help="Indiquez des mots rares, acronymes ou noms propres pour améliorer leur reconnaissance."
+        )
+        st.session_state.initial_prompt = initial_prompt.strip() if initial_prompt else None
+
+        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
         <div style="background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 0.85rem;">
             <div style="font-weight: 600; color: #38bdf8; font-size: 0.82rem;">🛡️ Confidentialité Absolue</div>
@@ -278,7 +320,11 @@ def main():
                                 "stop_event": st.session_state.stop_event,
                                 "model_size": st.session_state.selected_model,
                                 "export_srt": export_srt,
-                                "export_md": export_md
+                                "export_md": export_md,
+                                "language": st.session_state.get("selected_language"),
+                                "task": st.session_state.get("selected_task", "transcribe"),
+                                "initial_prompt": st.session_state.get("initial_prompt"),
+                                "vad_filter": st.session_state.get("use_vad", True)
                             }
                         )
                         add_script_run_ctx(t)
@@ -330,7 +376,11 @@ def main():
                             "profile": st.session_state.hw_profile,
                             "progress_queue": st.session_state.progress_queue,
                             "stop_event": st.session_state.stop_event,
-                            "model_size": st.session_state.selected_model
+                            "model_size": st.session_state.selected_model,
+                            "language": st.session_state.get("selected_language"),
+                            "task": st.session_state.get("selected_task", "transcribe"),
+                            "initial_prompt": st.session_state.get("initial_prompt"),
+                            "vad_filter": st.session_state.get("use_vad", True)
                         }
                     )
                     add_script_run_ctx(t)
@@ -380,6 +430,12 @@ def main():
                 st.session_state.status_label = "Chargement du modèle en mémoire GPU..."
             elif status == "batch_discovered":
                 st.session_state.total_batch_files = msg.get("total_files", 1)
+            elif status == "info_detected":
+                st.session_state.detected_language = msg.get("language")
+                st.session_state.language_probability = msg.get("language_probability")
+                st.session_state.executed_task = msg.get("task", "transcribe")
+                lang_disp = SUPPORTED_LANGUAGES.get(msg.get("language", ""), msg.get("language", "").upper())
+                st.session_state.status_label = f"Langue : {lang_disp} ({msg.get('language_probability', 100)}%)"
             elif status == "file_start":
                 st.session_state.current_file_name = msg.get("file_name", "")
                 st.session_state.current_file_idx = msg.get("current_idx", 1)
@@ -397,6 +453,12 @@ def main():
                     st.session_state.is_processing = False
                     st.session_state.transcription_done = True
                     st.session_state.progress_pct = 100
+                    if msg.get("language"):
+                        st.session_state.detected_language = msg.get("language")
+                    if msg.get("language_probability") is not None:
+                        st.session_state.language_probability = msg.get("language_probability")
+                    if msg.get("task"):
+                        st.session_state.executed_task = msg.get("task")
                     st.rerun()
             elif status == "batch_complete":
                 st.session_state.is_processing = False
@@ -477,6 +539,22 @@ def main():
             txt_text = txt_file.read_text(encoding="utf-8") if txt_file.exists() else ""
             md_text = md_file.read_text(encoding="utf-8") if md_file.exists() else ""
             srt_text = srt_file.read_text(encoding="utf-8") if srt_file.exists() else ""
+
+            # Résumé des métriques IA et audio
+            col_res1, col_res2, col_res3 = st.columns(3)
+            lang_code = st.session_state.get("detected_language", "auto")
+            lang_label = SUPPORTED_LANGUAGES.get(lang_code, lang_code.upper() if lang_code else "AUTO")
+            prob_val = st.session_state.get("language_probability", 100.0)
+            task_type = "Traduction (EN)" if st.session_state.get("executed_task") == "translate" else "Transcription"
+            
+            with col_res1:
+                ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
+            with col_res2:
+                ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
+            with col_res3:
+                ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                
+            st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
             
             # Onglets élégants Linear / Shadcn
             tab_txt, tab_md, tab_srt, tab_llm = st.tabs([
