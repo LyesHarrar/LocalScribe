@@ -528,7 +528,8 @@ def render_history_view():
                     file_path=h_file_path,
                     output_dir=h_out_dir,
                     base_name=h_base_name,
-                    record_id=rec_id
+                    record_id=rec_id,
+                    key_prefix=f"hist_{rec_id}"
                 )
 
             # Traduction à la demande pour l'historique
@@ -1357,7 +1358,8 @@ def main():
                             render_editor_tab(
                                 file_path=b_fpath,
                                 output_dir=b_out_dir,
-                                base_name=b_bname
+                                base_name=b_bname,
+                                key_prefix=f"batch_{idx}"
                             )
 
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
@@ -1489,7 +1491,8 @@ def main():
                 render_editor_tab(
                     file_path=file_path,
                     output_dir=out_dir,
-                    base_name=base_name
+                    base_name=base_name,
+                    key_prefix="single"
                 )
             
             with tab_txt:
