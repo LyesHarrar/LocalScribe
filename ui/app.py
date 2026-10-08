@@ -26,6 +26,7 @@ importlib.reload(ui.styles)
 from ui.styles import inject_custom_css
 from ui.prompts_templates import render_llm_templates
 from core.hardware_profiler import detect_hardware
+from core.clipboard import copy_to_clipboard
 from core.transcription_engine import (
     transcribe_file_threaded, 
     transcribe_batch_threaded, 
@@ -309,8 +310,14 @@ def render_history_view():
                 key=f"hist_txt_{rec_id}"
             )
             
-            # Boutons de téléchargement et suppression
-            col_d1, col_d2, col_d3, col_del = st.columns([1.5, 1.5, 1.5, 1])
+            # Boutons de copie, téléchargement et suppression
+            col_cp, col_d1, col_d2, col_d3, col_del = st.columns([1.8, 1.2, 1.2, 1.2, 0.9])
+            with col_cp:
+                if st.button("📋 Copier le texte", key=f"btn_cp_hist_{rec_id}", use_container_width=True, help="Copier l'intégralité du texte dans le presse-papier"):
+                    if copy_to_clipboard(txt_content):
+                        st.toast("Transcription copiée dans le presse-papier !", icon="📋")
+                    else:
+                        st.error("Impossible d'accéder au presse-papier.")
             with col_d1:
                 st.download_button(
                     label="⬇️ .txt",
@@ -358,7 +365,7 @@ def render_history_view():
                 else:
                     st.caption("SRT non disponible")
             with col_del:
-                if st.button("🗑️ Supprimer", key=f"del_rec_{rec_id}", use_container_width=True):
+                if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", use_container_width=True, help="Supprimer cet enregistrement de la base"):
                     delete_record(rec_id)
                     st.rerun()
 
@@ -799,6 +806,26 @@ def main():
                 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
             
+            # Barre d'actions rapides (Copie & Téléchargement immédiat)
+            col_act_cp, col_act_dl = st.columns([1, 1])
+            with col_act_cp:
+                if st.button("📋 Copier dans le presse-papier", type="primary", use_container_width=True, key="btn_copy_quick_main", help="Copier l'intégralité du texte transcrit en un seul clic"):
+                    if copy_to_clipboard(txt_text):
+                        st.toast("Transcription copiée dans le presse-papier !", icon="📋")
+                    else:
+                        st.error("Impossible d'accéder au presse-papier.")
+            with col_act_dl:
+                st.download_button(
+                    label=":material/download: Télécharger le texte (.txt)",
+                    data=txt_text,
+                    file_name=f"{base_name}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="btn_dl_quick_main"
+                )
+            
+            st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+            
             # Onglets élégants Linear / Shadcn
             tab_txt, tab_md, tab_srt, tab_llm = st.tabs([
                 ":material/description: Texte Brut (.txt)", 
@@ -808,33 +835,54 @@ def main():
             ])
             
             with tab_txt:
-                st.download_button(
-                    label=":material/download: Télécharger le fichier texte (.txt)",
-                    data=txt_text,
-                    file_name=f"{base_name}.txt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+                col_t_dl, col_t_cp = st.columns([1, 1])
+                with col_t_dl:
+                    st.download_button(
+                        label=":material/download: Télécharger le fichier texte (.txt)",
+                        data=txt_text,
+                        file_name=f"{base_name}.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="dl_btn_tab_txt"
+                    )
+                with col_t_cp:
+                    if st.button("📋 Copier le texte brut", key="btn_copy_tab_txt", use_container_width=True):
+                        if copy_to_clipboard(txt_text):
+                            st.toast("Texte brut copié dans le presse-papier !", icon="📋")
                 st.text_area("Transcription brute :", value=txt_text, height=350)
                 
             with tab_md:
-                st.download_button(
-                    label=":material/download: Télécharger le Markdown (.md)",
-                    data=md_text,
-                    file_name=f"{base_name}.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
+                col_m_dl, col_m_cp = st.columns([1, 1])
+                with col_m_dl:
+                    st.download_button(
+                        label=":material/download: Télécharger le Markdown (.md)",
+                        data=md_text,
+                        file_name=f"{base_name}.md",
+                        mime="text/markdown",
+                        use_container_width=True,
+                        key="dl_btn_tab_md"
+                    )
+                with col_m_cp:
+                    if st.button("📋 Copier le Markdown", key="btn_copy_tab_md", use_container_width=True):
+                        if copy_to_clipboard(md_text):
+                            st.toast("Markdown copié dans le presse-papier !", icon="📋")
                 st.markdown(md_text)
                 
             with tab_srt:
-                st.download_button(
-                    label=":material/download: Télécharger les Sous-titres (.srt)",
-                    data=srt_text,
-                    file_name=f"{base_name}.srt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+                col_s_dl, col_s_cp = st.columns([1, 1])
+                with col_s_dl:
+                    st.download_button(
+                        label=":material/download: Télécharger les Sous-titres (.srt)",
+                        data=srt_text,
+                        file_name=f"{base_name}.srt",
+                        mime="text/plain",
+                        use_container_width=True,
+                        key="dl_btn_tab_srt"
+                    )
+                with col_s_cp:
+                    if st.button("📋 Copier les sous-titres", key="btn_copy_tab_srt", use_container_width=True):
+                        if copy_to_clipboard(srt_text):
+                            st.toast("Sous-titres copiés dans le presse-papier !", icon="📋")
                 st.code(srt_text, language="text")
                 
             with tab_llm:

@@ -4,7 +4,7 @@ Harmonisé avec le thème Bleu Électrique & Obsidienne.
 """
 
 import streamlit as st
-import pyperclip
+from core.clipboard import copy_to_clipboard
 
 TEMPLATES = [
     {
@@ -101,10 +101,9 @@ def render_llm_templates(transcription_text: str = ""):
                 col_btn1, col_btn2, col_btn3 = st.columns(3)
                 with col_btn1:
                     if st.button(f":material/content_paste: Copier le prompt", key=f"copy_{tpl['id']}", use_container_width=True):
-                        try:
-                            pyperclip.copy(full_prompt)
-                            st.toast("Copié avec succès !", icon="✅")
-                        except Exception:
+                        if copy_to_clipboard(full_prompt):
+                            st.toast("Copié dans le presse-papier !", icon="✅")
+                        else:
                             st.toast("Erreur de copie.", icon="❌")
                 
                 with col_btn2:
