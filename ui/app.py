@@ -43,6 +43,7 @@ from core.transcription_engine import (
     SUPPORTED_LANGUAGES
 )
 from core.text_formatter import TranscriptionSegment, parse_srt
+from core.audio_preprocessor import is_ffmpeg_available
 from ui.editor_component import render_editor_tab
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
@@ -262,6 +263,37 @@ def render_sidebar():
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erreur de téléchargement : {e}")
+
+        # 7. Prétraitement Acoustique & FFmpeg
+        st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("### ⚡ Prétraitement Acoustique")
+        
+        ffmpeg_ok = is_ffmpeg_available()
+        if ffmpeg_ok:
+            st.markdown(
+                render_badge("⚡ FFmpeg Détecté", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                render_badge("ℹ️ Repli direct (FFmpeg absent)", color="#94a3b8", bg="rgba(148, 163, 184, 0.1)"),
+                unsafe_allow_html=True
+            )
+
+        normalize_vol = st.checkbox(
+            "🔊 Normaliser le volume (Auto-Gain)",
+            value=True,
+            help="Égalise dynamiquement le volume sonore pour rehausser les voix faibles, chuchotées ou lointaines sans distorsion (filtre broadcast dynaudnorm)."
+        )
+        st.session_state.normalize_volume = normalize_vol
+
+        denoise_audio = st.checkbox(
+            "🧹 Réduire le bruit de fond (Denoising)",
+            value=False,
+            help="Filtre les bruits sourds de ventilation (HVAC) et sifflements de micro via des filtres passe-bande et suppression spectrale."
+        )
+        st.session_state.denoise_audio = denoise_audio
+        st.session_state.preprocess_audio = normalize_vol or denoise_audio
 
         st.markdown("<hr style='margin: 1.25rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
         st.markdown("""
@@ -671,7 +703,10 @@ def main():
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
-                                "target_translation": st.session_state.get("target_translation_code")
+                                "target_translation": st.session_state.get("target_translation_code"),
+                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
+                                "normalize_volume": st.session_state.get("normalize_volume", True),
+                                "denoise": st.session_state.get("denoise_audio", False)
                             }
                         )
                         add_script_run_ctx(t)
@@ -778,7 +813,10 @@ def main():
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
-                                "target_translation": st.session_state.get("target_translation_code")
+                                "target_translation": st.session_state.get("target_translation_code"),
+                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
+                                "normalize_volume": st.session_state.get("normalize_volume", True),
+                                "denoise": st.session_state.get("denoise_audio", False)
                             }
                         )
                     else:
@@ -804,7 +842,10 @@ def main():
                                 "vad_filter": st.session_state.get("use_vad", True),
                                 "diarize": st.session_state.get("use_diarization", False),
                                 "num_speakers": st.session_state.get("num_speakers"),
-                                "target_translation": st.session_state.get("target_translation_code")
+                                "target_translation": st.session_state.get("target_translation_code"),
+                                "preprocess_audio": st.session_state.get("preprocess_audio", True),
+                                "normalize_volume": st.session_state.get("normalize_volume", True),
+                                "denoise": st.session_state.get("denoise_audio", False)
                             }
                         )
                         
@@ -874,6 +915,8 @@ def main():
                 st.session_state.current_file_name = msg.get("file_name", st.session_state.get("current_file_name", ""))
                 st.session_state.current_file_idx = msg.get("current_idx", st.session_state.get("current_file_idx", 1))
                 st.session_state.latest_text += " " + msg.get("segment_text", "")
+            elif status == "preprocessing":
+                st.session_state.status_label = msg.get("message", "⚡ Prétraitement acoustique en cours...")
             elif status == "diarizing":
                 st.session_state.status_label = msg.get("message", "🗣️ Identification des locuteurs...")
             elif status == "translating":
@@ -883,6 +926,7 @@ def main():
                     st.session_state.is_processing = False
                     st.session_state.transcription_done = True
                     st.session_state.progress_pct = 100
+                    st.session_state.is_preprocessed = msg.get("preprocessed", False)
                     if msg.get("language"):
                         st.session_state.detected_language = msg.get("language")
                     if msg.get("language_probability") is not None:
@@ -1181,12 +1225,16 @@ def main():
             prob_val = st.session_state.get("language_probability", 100.0)
             task_type = "Traduction (EN)" if st.session_state.get("executed_task") == "translate" else "Transcription"
 
+            is_prep = st.session_state.get("is_preprocessed", False)
+            gain_label = "Auto-Gain" if is_prep else "Direct"
+            vad_desc = f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'} | {gain_label}"
+
             if speakers:
                 col_res1, col_res2, col_res3, col_res4 = st.columns(4)
                 with col_res1:
                     ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
-                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
+                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
                     ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
                 with col_res4:
@@ -1196,7 +1244,7 @@ def main():
                 with col_res1:
                     ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
-                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=f"VAD: {'Actif' if st.session_state.get('use_vad', True) else 'Inactif'}")
+                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
                     ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
 

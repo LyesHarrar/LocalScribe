@@ -65,12 +65,16 @@ def transcribe_file_threaded(
     vad_filter: bool = True,
     diarize: bool = False,
     num_speakers: Optional[int] = None,
-    target_translation: Optional[str] = None
+    target_translation: Optional[str] = None,
+    preprocess_audio: bool = False,
+    normalize_volume: bool = True,
+    denoise: bool = False
 ) -> None:
     """
     Transcrit un fichier unique en arrière-plan.
     Émet des événements dans progress_queue :
     - 'loading_model'
+    - 'preprocessing' (optimisation audio, auto-gain, denoising)
     - 'starting'
     - 'info_detected' (langue détectée, certitude, durée)
     - 'progress' (pourcentage, temps courant, texte du segment)
@@ -79,9 +83,34 @@ def transcribe_file_threaded(
     - 'error'
     - 'stopped'
     """
+    audio_to_transcribe = file_path
+    pre_meta = {"preprocessed": False}
     try:
         model_to_use = model_size if model_size else profile.recommended_model
         
+        # 0. Prétraitement acoustique & extraction rapide FFmpeg
+        if preprocess_audio and not stop_event.is_set():
+            try:
+                from core.audio_preprocessor import preprocess_audio as run_preprocess
+                progress_queue.put({
+                    "status": "preprocessing",
+                    "file": str(file_path),
+                    "message": "⚡ Optimisation audio & normalisation..."
+                })
+                audio_to_transcribe, pre_meta = run_preprocess(
+                    input_path=file_path,
+                    output_dir=output_dir,
+                    normalize_volume=normalize_volume,
+                    denoise=denoise,
+                    status_callback=lambda msg: progress_queue.put({
+                        "status": "preprocessing",
+                        "file": str(file_path),
+                        "message": msg
+                    })
+                )
+            except Exception as pe:
+                logger.warning(f"Erreur prétraitement audio : {pe}")
+
         progress_queue.put({"status": "loading_model", "file": str(file_path)})
         
         model = WhisperModel(
@@ -102,7 +131,7 @@ def transcribe_file_threaded(
         if initial_prompt and initial_prompt.strip():
             transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
 
-        segments_gen, info = model.transcribe(str(file_path), **transcribe_kwargs)
+        segments_gen, info = model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
         duration = getattr(info, "duration", 0.0)
         detected_lang = getattr(info, "language", language or "auto")
         raw_prob = getattr(info, "language_probability", 1.0)
@@ -147,7 +176,7 @@ def transcribe_file_threaded(
                 from core.diarization_engine import DiarizationEngine, assign_speakers_to_whisper_segments
                 diar_engine = DiarizationEngine()
                 diar_segments = diar_engine.diarize(
-                    audio_path=file_path,
+                    audio_path=audio_to_transcribe,
                     num_speakers=num_speakers,
                     status_callback=lambda msg: progress_queue.put({
                         "status": "diarizing",
@@ -304,11 +333,20 @@ def transcribe_file_threaded(
             "translated_txt_path": translated_txt_path,
             "translated_srt_path": translated_srt_path,
             "translated_md_path": translated_md_path,
-            "translated_text": translated_text_content
+            "translated_text": translated_text_content,
+            "preprocessed": pre_meta.get("preprocessed", False),
+            "filters_applied": pre_meta.get("filters_applied", "")
         })
         
     except Exception as e:
         progress_queue.put({"status": "error", "file": str(file_path), "error": str(e)})
+    finally:
+        if audio_to_transcribe != file_path:
+            try:
+                from core.audio_preprocessor import cleanup_preprocessed_file
+                cleanup_preprocessed_file(audio_to_transcribe, file_path)
+            except Exception:
+                pass
 
 
 def transcribe_batch_threaded(
@@ -327,7 +365,10 @@ def transcribe_batch_threaded(
     num_speakers: Optional[int] = None,
     files: Optional[List[Path]] = None,
     output_dir: Optional[Path] = None,
-    target_translation: Optional[str] = None
+    target_translation: Optional[str] = None,
+    preprocess_audio: bool = False,
+    normalize_volume: bool = True,
+    denoise: bool = False
 ) -> None:
     """
     Transcription par lot (file d'attente ou scan récursif) :
@@ -438,6 +479,32 @@ def transcribe_batch_threaded(
                 "total_files": total_files
             })
 
+            audio_to_transcribe = file_path
+            pre_meta = {"preprocessed": False}
+            if preprocess_audio and not (stop_event and stop_event.is_set()):
+                try:
+                    from core.audio_preprocessor import preprocess_audio as run_preprocess
+                    progress_queue.put({
+                        "status": "preprocessing",
+                        "file": str(file_path),
+                        "file_name": file_path.name,
+                        "message": f"⚡ Prétraitement audio & normalisation ({file_path.name})..."
+                    })
+                    audio_to_transcribe, pre_meta = run_preprocess(
+                        input_path=file_path,
+                        output_dir=dest_dir,
+                        normalize_volume=normalize_volume,
+                        denoise=denoise,
+                        status_callback=lambda msg: progress_queue.put({
+                            "status": "preprocessing",
+                            "file": str(file_path),
+                            "file_name": file_path.name,
+                            "message": msg
+                        })
+                    )
+                except Exception as pe:
+                    logger.warning(f"Erreur prétraitement batch {file_path.name} : {pe}")
+
             # Inférence Whisper
             transcribe_kwargs = {
                 "beam_size": 5,
@@ -449,7 +516,7 @@ def transcribe_batch_threaded(
             if initial_prompt and initial_prompt.strip():
                 transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
 
-            segments_gen, info = model.transcribe(str(file_path), **transcribe_kwargs)
+            segments_gen, info = model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
             duration = getattr(info, "duration", 0.0)
             detected_lang = getattr(info, "language", language or "auto")
             raw_prob = getattr(info, "language_probability", 1.0)
@@ -486,7 +553,7 @@ def transcribe_batch_threaded(
                 })
                 try:
                     diar_segments = diar_engine.diarize(
-                        audio_path=file_path,
+                        audio_path=audio_to_transcribe,
                         num_speakers=num_speakers
                     )
                     segments, detected_speakers = assign_speakers_to_whisper_segments(segments, diar_segments)
@@ -661,8 +728,16 @@ def transcribe_batch_threaded(
                 "translated_txt_path": translated_txt_path,
                 "translated_srt_path": translated_srt_path,
                 "translated_md_path": translated_md_path,
-                "translated_text": translated_text_content
+                "translated_text": translated_text_content,
+                "preprocessed": pre_meta.get("preprocessed", False)
             })
+
+            if audio_to_transcribe != file_path:
+                try:
+                    from core.audio_preprocessor import cleanup_preprocessed_file
+                    cleanup_preprocessed_file(audio_to_transcribe, file_path)
+                except Exception:
+                    pass
 
         # 5. Fin du traitement par lot
         progress_queue.put({

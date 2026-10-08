@@ -679,9 +679,154 @@ class TestTranscriptionEngine(unittest.TestCase):
             self.assertEqual(segs[1]["id"], 2)
             self.assertEqual(segs[1]["text"], "Bienvenue dans l'éditeur.")
 
+    @patch("core.audio_preprocessor.cleanup_preprocessed_file")
+    @patch("core.audio_preprocessor.preprocess_audio")
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_with_preprocessing_enabled(self, mock_whisper_class, mock_preprocess, mock_cleanup):
+        """Vérifie que le prétraitement acoustique FFmpeg est déclenché et nettoyé après transcription."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.98
+
+        class DummySegment:
+            start = 0.0
+            end = 5.0
+            text = "Audio optimisé"
+            speaker = None
+
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            source_video = tmp_path / "conference.mp4"
+            source_video.write_bytes(b"video content")
+            fake_preprocessed_wav = tmp_path / "preprocessed_conference.wav"
+            fake_preprocessed_wav.write_bytes(b"wav content")
+
+            mock_preprocess.return_value = (
+                fake_preprocessed_wav,
+                {
+                    "preprocessed": True,
+                    "normalized": True,
+                    "denoised": True,
+                    "filters_applied": "highpass, lowpass, dynaudnorm"
+                }
+            )
+
+            out_dir = tmp_path / "out"
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_file_threaded(
+                file_path=source_video,
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                preprocess_audio=True,
+                normalize_volume=True,
+                denoise=True
+            )
+
+            # Vérification de l'appel à preprocess_audio
+            mock_preprocess.assert_called_once()
+            _, kwargs = mock_preprocess.call_args
+            self.assertEqual(kwargs["input_path"], source_video)
+            self.assertTrue(kwargs["normalize_volume"])
+            self.assertTrue(kwargs["denoise"])
+
+            # Vérification de l'appel à Whisper sur le fichier prétraité
+            mock_model.transcribe.assert_called_once()
+            called_audio_arg = mock_model.transcribe.call_args[0][0]
+            self.assertEqual(called_audio_arg, str(fake_preprocessed_wav))
+
+            # Vérification du nettoyage du fichier temporaire
+            mock_cleanup.assert_called_once_with(fake_preprocessed_wav, source_video)
+
+            # Vérification des messages émis
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            file_complete = [m for m in messages if m["status"] == "file_complete"][0]
+            self.assertTrue(file_complete["preprocessed"])
+            self.assertIn("dynaudnorm", file_complete["filters_applied"])
+
+    @patch("core.audio_preprocessor.cleanup_preprocessed_file")
+    @patch("core.audio_preprocessor.preprocess_audio")
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_with_preprocessing(self, mock_whisper_class, mock_preprocess, mock_cleanup):
+        """Vérifie que le prétraitement acoustique FFmpeg fonctionne sur une file d'attente multi-fichiers."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.95
+
+        class DummySegment:
+            start = 0.0
+            end = 2.5
+            text = "Segment batch"
+            speaker = None
+
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f1 = tmp_path / "vid1.mp4"
+            f2 = tmp_path / "vid2.mkv"
+            f1.write_bytes(b"vid1")
+            f2.write_bytes(b"vid2")
+
+            wav1 = tmp_path / "pre_vid1.wav"
+            wav2 = tmp_path / "pre_vid2.wav"
+            wav1.write_bytes(b"wav1")
+            wav2.write_bytes(b"wav2")
+
+            mock_preprocess.side_effect = [
+                (wav1, {"preprocessed": True, "filters_applied": "dynaudnorm"}),
+                (wav2, {"preprocessed": True, "filters_applied": "dynaudnorm"})
+            ]
+
+            out_dir = tmp_path / "out_batch"
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_batch_threaded(
+                files=[f1, f2],
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                preprocess_audio=True,
+                normalize_volume=True,
+                denoise=False
+            )
+
+            self.assertEqual(mock_preprocess.call_count, 2)
+            self.assertEqual(mock_cleanup.call_count, 2)
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            batch_complete = [m for m in messages if m["status"] == "batch_complete"][0]
+            self.assertEqual(batch_complete["processed"], 2)
+            self.assertEqual(batch_complete["total_files"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
 
 
 
