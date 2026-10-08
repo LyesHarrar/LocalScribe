@@ -50,7 +50,6 @@ from core.version import (
     __version__,
     __author__,
     __github_repo__,
-    __github_author__,
     check_for_updates,
 )
 from ui.editor_component import render_editor_tab
@@ -820,7 +819,7 @@ def main():
     render_sidebar()
     
     # En-tête Principal de l'Application
-    col_header_title, col_header_actions = st.columns([3.3, 1.9], vertical_alignment="center")
+    col_header_title, col_header_actions = st.columns([3.8, 1.2], vertical_alignment="center")
     
     with col_header_title:
         st.markdown(f"""
@@ -830,7 +829,7 @@ def main():
                 <span style="background: rgba(46, 116, 253, 0.15); color: #60a5fa; border: 1px solid rgba(46, 116, 253, 0.35); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;">v{__version__}</span>
             </div>
             <p style="color: #94a3b8; font-size: 0.93rem; margin-top: 0.2rem; margin-bottom: 0;">
-                Transcription audio & vidéo 100 % locale et privée • Conçu par <strong style="color: #e2e8f0;">{__author__}</strong>
+                Transcription audio & vidéo 100 % locale et privée
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -843,7 +842,7 @@ def main():
         st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
 
     with col_header_actions:
-        col_act_guide, col_act_pop, col_act_git = st.columns([1, 1.1, 1])
+        col_act_guide, col_act_pop = st.columns([1, 1.1])
         with col_act_guide:
             with st.popover("❓ Guide", use_container_width=True):
                 st.markdown("### 🚀 Guide Express LocalScribe")
@@ -878,8 +877,6 @@ def main():
         with col_act_pop:
             with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
                 st.markdown(f"### LocalScribe `v{__version__}`")
-                st.markdown(f"**Développé par :** [{__author__}]({__github_author__})")
-                st.markdown(f"**Dépôt officiel :** [{__github_repo__.replace('https://', '')}]({__github_repo__})")
                 st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
                 st.divider()
                 
@@ -910,9 +907,6 @@ def main():
                         
                 st.divider()
                 st.caption("Licence MIT • 100% Open-Source & Gratuit")
-                
-        with col_act_git:
-            st.link_button("⭐ GitHub", __github_repo__, use_container_width=True)
     
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
