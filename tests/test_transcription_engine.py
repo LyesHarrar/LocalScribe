@@ -619,8 +619,69 @@ class TestTranscriptionEngine(unittest.TestCase):
             self.assertEqual(file_complete_msg["target_translation"], "en")
             self.assertIn("Hello world", file_complete_msg["translated_text"])
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_emits_serialized_segments(self, mock_whisper_class):
+        """Vérifie que transcribe_file_threaded émet bien les segments sérialisés pour l'éditeur."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummySegment:
+            def __init__(self, start, end, text, speaker="Alice"):
+                self.start = start
+                self.end = end
+                self.text = text
+                self.speaker = speaker
+
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.99
+
+        mock_model.transcribe.return_value = (
+            [
+                DummySegment(0.0, 4.5, "Bonjour à tous."),
+                DummySegment(4.5, 10.0, "Bienvenue dans l'éditeur.")
+            ],
+            DummyInfo()
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "interview_ed.mp3"
+            fake_audio.write_bytes(b"content")
+
+            out_dir = tmp_path / "out"
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            file_complete_msg = [m for m in messages if m["status"] == "file_complete"][0]
+            self.assertIn("segments", file_complete_msg)
+            segs = file_complete_msg["segments"]
+            self.assertEqual(len(segs), 2)
+            self.assertEqual(segs[0]["id"], 1)
+            self.assertEqual(segs[0]["text"], "Bonjour à tous.")
+            self.assertEqual(segs[0]["start"], 0.0)
+            self.assertEqual(segs[0]["end"], 4.5)
+            self.assertEqual(segs[0]["speaker"], "Alice")
+            self.assertEqual(segs[1]["id"], 2)
+            self.assertEqual(segs[1]["text"], "Bienvenue dans l'éditeur.")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -1,5 +1,13 @@
 import unittest
-from core.text_formatter import format_timestamp, generate_srt, generate_txt, generate_markdown
+from core.text_formatter import (
+    format_timestamp, 
+    generate_srt, 
+    generate_txt, 
+    generate_markdown,
+    TranscriptionSegment,
+    parse_timestamp,
+    parse_srt
+)
 
 
 class DummySegment:
@@ -78,6 +86,71 @@ class TestTextFormatter(unittest.TestCase):
         self.assertIn("- `[00:00:00 -> 00:00:04]` **Locuteur 1** : Bonjour tout le monde.", md)
         self.assertIn("- `[00:00:04 -> 00:00:08]` **Locuteur 2** : Bonjour, merci d'être là.", md)
 
+    def test_transcription_segment_dataclass(self):
+        seg = TranscriptionSegment(start=1.234, end=5.678, text="Test segment", speaker="Alice", id=1)
+        d = seg.to_dict()
+        self.assertEqual(d["start"], 1.234)
+        self.assertEqual(d["end"], 5.678)
+        self.assertEqual(d["text"], "Test segment")
+        self.assertEqual(d["speaker"], "Alice")
+        self.assertEqual(d["id"], 1)
+
+        restored = TranscriptionSegment.from_dict(d)
+        self.assertEqual(restored.start, seg.start)
+        self.assertEqual(restored.end, seg.end)
+        self.assertEqual(restored.text, seg.text)
+        self.assertEqual(restored.speaker, seg.speaker)
+        self.assertEqual(restored.id, seg.id)
+
+    def test_parse_timestamp(self):
+        self.assertAlmostEqual(parse_timestamp("00:00:00,000"), 0.0)
+        self.assertAlmostEqual(parse_timestamp("00:01:23,456"), 83.456)
+        self.assertAlmostEqual(parse_timestamp("01:02:03.500"), 3723.5)
+        self.assertAlmostEqual(parse_timestamp("02:15"), 135.0)
+        self.assertAlmostEqual(parse_timestamp("12.5"), 12.5)
+        self.assertEqual(parse_timestamp("invalid"), 0.0)
+
+    def test_parse_srt(self):
+        srt_raw = """1
+00:00:01,000 --> 00:00:04,500
+[Alice] Bonjour tout le monde.
+
+2
+00:00:05,200 --> 00:00:09,800
+Bob: Bonjour Alice, comment vas-tu ?
+
+3
+00:00:10,000 --> 00:00:14,000
+Je vais très bien merci.
+Deuxième ligne de texte.
+"""
+        parsed = parse_srt(srt_raw)
+        self.assertEqual(len(parsed), 3)
+
+        self.assertEqual(parsed[0].id, 1)
+        self.assertAlmostEqual(parsed[0].start, 1.0)
+        self.assertAlmostEqual(parsed[0].end, 4.5)
+        self.assertEqual(parsed[0].speaker, "Alice")
+        self.assertEqual(parsed[0].text, "Bonjour tout le monde.")
+
+        self.assertEqual(parsed[1].id, 2)
+        self.assertAlmostEqual(parsed[1].start, 5.2)
+        self.assertAlmostEqual(parsed[1].end, 9.8)
+        self.assertEqual(parsed[1].speaker, "Bob")
+        self.assertEqual(parsed[1].text, "Bonjour Alice, comment vas-tu ?")
+
+        self.assertEqual(parsed[2].id, 3)
+        self.assertAlmostEqual(parsed[2].start, 10.0)
+        self.assertAlmostEqual(parsed[2].end, 14.0)
+        self.assertIsNone(parsed[2].speaker)
+        self.assertIn("Je vais très bien merci", parsed[2].text)
+        self.assertIn("Deuxième ligne de texte", parsed[2].text)
+
+    def test_parse_srt_empty(self):
+        self.assertEqual(parse_srt(""), [])
+        self.assertEqual(parse_srt("   \n\n  "), [])
+
 
 if __name__ == "__main__":
     unittest.main()
+
