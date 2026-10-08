@@ -11,6 +11,9 @@ import queue
 import threading
 from pathlib import Path
 from typing import Optional, List, Set
+import logging
+
+logger = logging.getLogger("LocalScribe.Engine")
 
 from core.hardware_profiler import HardwareProfile
 from core.text_formatter import generate_srt, generate_txt, generate_markdown
@@ -114,7 +117,7 @@ def transcribe_file_threaded(
                 })
                 audio_to_transcribe, pre_meta = run_preprocess(
                     input_path=file_path,
-                    output_dir=output_dir,
+                    output_dir=None,  # Écrit dans tempfile.gettempdir() pour ne jamais polluer le dossier source
                     normalize_volume=normalize_volume,
                     denoise=denoise,
                     status_callback=lambda msg: progress_queue.put({
@@ -128,12 +131,34 @@ def transcribe_file_threaded(
 
         progress_queue.put({"status": "loading_model", "file": str(file_path)})
         
-        model = WhisperModel(
-            model_to_use, 
-            device=profile.device, 
-            compute_type=profile.compute_type,
-            download_root=str(get_models_dir())
-        )
+        device = profile.device if profile else "cpu"
+        compute_type = profile.compute_type if profile else "int8"
+
+        try:
+            model = WhisperModel(
+                model_to_use, 
+                device=device, 
+                compute_type=compute_type,
+                download_root=str(get_models_dir())
+            )
+        except Exception as me:
+            if device == "cuda":
+                logger.warning(f"Échec chargement Whisper sur CUDA ({me}). Repli automatique sur CPU.")
+                progress_queue.put({
+                    "status": "warning",
+                    "file": str(file_path),
+                    "warning": "CUDA indisponible (cuBLAS manquant). Bascule automatique sur CPU."
+                })
+                device = "cpu"
+                compute_type = "int8"
+                model = WhisperModel(
+                    model_to_use, 
+                    device=device, 
+                    compute_type=compute_type,
+                    download_root=str(get_models_dir())
+                )
+            else:
+                raise
         
         progress_queue.put({"status": "starting", "file": str(file_path)})
         
@@ -147,7 +172,31 @@ def transcribe_file_threaded(
         if initial_prompt and initial_prompt.strip():
             transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
 
-        segments_gen, info = model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
+        def _run_transcribe():
+            return model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
+
+        try:
+            segments_gen, info = _run_transcribe()
+        except RuntimeError as re:
+            if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")):
+                logger.warning(f"Erreur CUDA à l'inférence ({re}). Bascule automatique sur CPU.")
+                progress_queue.put({
+                    "status": "warning",
+                    "file": str(file_path),
+                    "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                })
+                device = "cpu"
+                compute_type = "int8"
+                model = WhisperModel(
+                    model_to_use, 
+                    device=device, 
+                    compute_type=compute_type,
+                    download_root=str(get_models_dir())
+                )
+                segments_gen, info = _run_transcribe()
+            else:
+                raise
+
         duration = getattr(info, "duration", 0.0)
         detected_lang = getattr(info, "language", language or "auto")
         raw_prob = getattr(info, "language_probability", 1.0)
@@ -167,28 +216,70 @@ def transcribe_file_threaded(
         eta_calculator = ETACalculator()
 
         segments = []
-        for segment in segments_gen:
-            if stop_event.is_set():
-                progress_queue.put({"status": "stopped", "file": str(file_path)})
-                return
-            
-            segments.append(segment)
-            percentage = (segment.end / duration) * 100 if duration > 0 else 0
-            eta_metrics = eta_calculator.update(segment.end, duration)
-            progress_queue.put({
-                "status": "progress",
-                "file": str(file_path),
-                "percentage": min(100.0, percentage),
-                "current_time": segment.end,
-                "duration": duration,
-                "segment_text": segment.text,
-                "speed_ratio": eta_metrics["speed_ratio"],
-                "speed_str": eta_metrics["speed_str"],
-                "eta_seconds": eta_metrics["eta_seconds"],
-                "eta_str": eta_metrics["eta_str"],
-                "elapsed_seconds": eta_metrics["elapsed_seconds"],
-                "elapsed_str": eta_metrics["elapsed_str"]
-            })
+        try:
+            for segment in segments_gen:
+                if stop_event.is_set():
+                    progress_queue.put({"status": "stopped", "file": str(file_path)})
+                    return
+                
+                segments.append(segment)
+                percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                eta_metrics = eta_calculator.update(segment.end, duration)
+                progress_queue.put({
+                    "status": "progress",
+                    "file": str(file_path),
+                    "percentage": min(100.0, percentage),
+                    "current_time": segment.end,
+                    "duration": duration,
+                    "segment_text": segment.text,
+                    "speed_ratio": eta_metrics["speed_ratio"],
+                    "speed_str": eta_metrics["speed_str"],
+                    "eta_seconds": eta_metrics["eta_seconds"],
+                    "eta_str": eta_metrics["eta_str"],
+                    "elapsed_seconds": eta_metrics["elapsed_seconds"],
+                    "elapsed_str": eta_metrics["elapsed_str"]
+                })
+        except RuntimeError as re:
+            if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")) and len(segments) == 0:
+                logger.warning(f"Erreur CUDA à l'encodage ({re}). Bascule automatique sur CPU.")
+                progress_queue.put({
+                    "status": "warning",
+                    "file": str(file_path),
+                    "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                })
+                device = "cpu"
+                compute_type = "int8"
+                model = WhisperModel(
+                    model_to_use, 
+                    device=device, 
+                    compute_type=compute_type,
+                    download_root=str(get_models_dir())
+                )
+                segments_gen, info = _run_transcribe()
+                duration = getattr(info, "duration", 0.0)
+                for segment in segments_gen:
+                    if stop_event.is_set():
+                        progress_queue.put({"status": "stopped", "file": str(file_path)})
+                        return
+                    segments.append(segment)
+                    percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                    eta_metrics = eta_calculator.update(segment.end, duration)
+                    progress_queue.put({
+                        "status": "progress",
+                        "file": str(file_path),
+                        "percentage": min(100.0, percentage),
+                        "current_time": segment.end,
+                        "duration": duration,
+                        "segment_text": segment.text,
+                        "speed_ratio": eta_metrics["speed_ratio"],
+                        "speed_str": eta_metrics["speed_str"],
+                        "eta_seconds": eta_metrics["eta_seconds"],
+                        "eta_str": eta_metrics["eta_str"],
+                        "elapsed_seconds": eta_metrics["elapsed_seconds"],
+                        "elapsed_str": eta_metrics["elapsed_str"]
+                    })
+            else:
+                raise
 
         # Diarisation optionnelle des locuteurs
         detected_speakers = []
@@ -415,6 +506,7 @@ def transcribe_batch_threaded(
             all_files = [
                 Path(f).resolve() for f in files
                 if Path(f).is_file() and Path(f).suffix.lower() in SUPPORTED_EXTENSIONS
+                and not Path(f).name.startswith("ls_opt_")
             ]
         elif target_dir:
             target_path = Path(target_dir).resolve()
@@ -425,6 +517,7 @@ def transcribe_batch_threaded(
             all_files = [
                 f for f in target_path.rglob("*")
                 if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+                and not f.name.startswith("ls_opt_")
             ]
             all_files.sort()
         else:
@@ -452,12 +545,30 @@ def transcribe_batch_threaded(
         device = profile.device if profile else "cpu"
         compute_type = profile.compute_type if profile else "int8"
 
-        model = WhisperModel(
-            model_to_use, 
-            device=device, 
-            compute_type=compute_type,
-            download_root=str(get_models_dir())
-        )
+        try:
+            model = WhisperModel(
+                model_to_use, 
+                device=device, 
+                compute_type=compute_type,
+                download_root=str(get_models_dir())
+            )
+        except Exception as me:
+            if device == "cuda":
+                logger.warning(f"Échec initialisation Whisper sur CUDA ({me}). Repli automatique sur CPU.")
+                progress_queue.put({
+                    "status": "warning",
+                    "warning": "Accélération CUDA indisponible (cuBLAS manquant). Bascule automatique sur CPU."
+                })
+                device = "cpu"
+                compute_type = "int8"
+                model = WhisperModel(
+                    model_to_use, 
+                    device=device, 
+                    compute_type=compute_type,
+                    download_root=str(get_models_dir())
+                )
+            else:
+                raise
 
         processed_count = 0
         skipped_count = 0
@@ -529,7 +640,7 @@ def transcribe_batch_threaded(
                     })
                     audio_to_transcribe, pre_meta = run_preprocess(
                         input_path=file_path,
-                        output_dir=dest_dir,
+                        output_dir=None,  # Écrit dans tempfile.gettempdir() pour ne jamais polluer le dossier de l'utilisateur
                         normalize_volume=normalize_volume,
                         denoise=denoise,
                         status_callback=lambda msg: progress_queue.put({
@@ -553,46 +664,123 @@ def transcribe_batch_threaded(
             if initial_prompt and initial_prompt.strip():
                 transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
 
-            segments_gen, info = model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
+            def _init_batch_transcribe():
+                return model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
+
+            try:
+                segments_gen, info = _init_batch_transcribe()
+            except RuntimeError as re:
+                if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")):
+                    logger.warning(f"Erreur CUDA à l'inférence batch ({re}). Bascule automatique sur CPU.")
+                    progress_queue.put({
+                        "status": "warning",
+                        "file": str(file_path),
+                        "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                    })
+                    device = "cpu"
+                    compute_type = "int8"
+                    model = WhisperModel(
+                        model_to_use, 
+                        device=device, 
+                        compute_type=compute_type,
+                        download_root=str(get_models_dir())
+                    )
+                    segments_gen, info = _init_batch_transcribe()
+                else:
+                    raise
+
             duration = getattr(info, "duration", 0.0)
             detected_lang = getattr(info, "language", language or "auto")
             raw_prob = getattr(info, "language_probability", 1.0)
             lang_prob = round(raw_prob * 100, 1) if raw_prob is not None else 100.0
             segments = []
 
-            for segment in segments_gen:
-                if stop_event and stop_event.is_set():
-                    progress_queue.put({"status": "stopped", "file": str(file_path)})
-                    return
+            try:
+                for segment in segments_gen:
+                    if stop_event and stop_event.is_set():
+                        progress_queue.put({"status": "stopped", "file": str(file_path)})
+                        return
 
-                segments.append(segment)
-                percentage = (segment.end / duration) * 100 if duration > 0 else 0
-                file_metrics = file_eta_calc.update(segment.end, duration)
-                batch_metrics = batch_eta_calc.estimate_batch_remaining(
-                    current_idx=idx,
-                    current_file_eta_seconds=file_metrics.get("eta_seconds")
-                )
-                progress_queue.put({
-                    "status": "progress",
-                    "file": str(file_path),
-                    "file_name": file_path.name,
-                    "current_idx": idx,
-                    "total_files": total_files,
-                    "percentage": min(100.0, percentage),
-                    "current_time": segment.end,
-                    "duration": duration,
-                    "segment_text": segment.text,
-                    "speed_ratio": file_metrics["speed_ratio"],
-                    "speed_str": file_metrics["speed_str"],
-                    "eta_seconds": file_metrics["eta_seconds"],
-                    "eta_str": file_metrics["eta_str"],
-                    "elapsed_seconds": file_metrics["elapsed_seconds"],
-                    "elapsed_str": file_metrics["elapsed_str"],
-                    "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
-                    "batch_eta_str": batch_metrics["batch_eta_str"],
-                    "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
-                    "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
-                })
+                    segments.append(segment)
+                    percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                    file_metrics = file_eta_calc.update(segment.end, duration)
+                    batch_metrics = batch_eta_calc.estimate_batch_remaining(
+                        current_idx=idx,
+                        current_file_eta_seconds=file_metrics.get("eta_seconds")
+                    )
+                    progress_queue.put({
+                        "status": "progress",
+                        "file": str(file_path),
+                        "file_name": file_path.name,
+                        "current_idx": idx,
+                        "total_files": total_files,
+                        "percentage": min(100.0, percentage),
+                        "current_time": segment.end,
+                        "duration": duration,
+                        "segment_text": segment.text,
+                        "speed_ratio": file_metrics["speed_ratio"],
+                        "speed_str": file_metrics["speed_str"],
+                        "eta_seconds": file_metrics["eta_seconds"],
+                        "eta_str": file_metrics["eta_str"],
+                        "elapsed_seconds": file_metrics["elapsed_seconds"],
+                        "elapsed_str": file_metrics["elapsed_str"],
+                        "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
+                        "batch_eta_str": batch_metrics["batch_eta_str"],
+                        "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
+                        "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
+                    })
+            except RuntimeError as re:
+                if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")) and len(segments) == 0:
+                    logger.warning(f"Erreur CUDA à l'encodage batch ({re}). Bascule automatique sur CPU.")
+                    progress_queue.put({
+                        "status": "warning",
+                        "file": str(file_path),
+                        "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                    })
+                    device = "cpu"
+                    compute_type = "int8"
+                    model = WhisperModel(
+                        model_to_use, 
+                        device=device, 
+                        compute_type=compute_type,
+                        download_root=str(get_models_dir())
+                    )
+                    segments_gen, info = _init_batch_transcribe()
+                    duration = getattr(info, "duration", 0.0)
+                    for segment in segments_gen:
+                        if stop_event and stop_event.is_set():
+                            progress_queue.put({"status": "stopped", "file": str(file_path)})
+                            return
+                        segments.append(segment)
+                        percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                        file_metrics = file_eta_calc.update(segment.end, duration)
+                        batch_metrics = batch_eta_calc.estimate_batch_remaining(
+                            current_idx=idx,
+                            current_file_eta_seconds=file_metrics.get("eta_seconds")
+                        )
+                        progress_queue.put({
+                            "status": "progress",
+                            "file": str(file_path),
+                            "file_name": file_path.name,
+                            "current_idx": idx,
+                            "total_files": total_files,
+                            "percentage": min(100.0, percentage),
+                            "current_time": segment.end,
+                            "duration": duration,
+                            "segment_text": segment.text,
+                            "speed_ratio": file_metrics["speed_ratio"],
+                            "speed_str": file_metrics["speed_str"],
+                            "eta_seconds": file_metrics["eta_seconds"],
+                            "eta_str": file_metrics["eta_str"],
+                            "elapsed_seconds": file_metrics["elapsed_seconds"],
+                            "elapsed_str": file_metrics["elapsed_str"],
+                            "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
+                            "batch_eta_str": batch_metrics["batch_eta_str"],
+                            "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
+                            "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
+                        })
+                else:
+                    raise
 
             # Diarisation batch optionnelle
             detected_speakers = []

@@ -49,10 +49,23 @@ class TestHardwareProfiler(unittest.TestCase):
         mock_machine.return_value = "arm64"
         
         profile = detect_hardware()
-        
         self.assertEqual(profile.device, "cpu")
         self.assertEqual(profile.compute_type, "int8")
         self.assertEqual(profile.recommended_model, "small")
+    @patch("core.hardware_profiler.get_vram_gb")
+    @patch("core.hardware_profiler.is_cuda_available")
+    @patch("core.hardware_profiler.platform.system")
+    def test_cuda_missing_cublas_fallback(self, mock_system, mock_is_cuda, mock_get_vram):
+        mock_system.return_value = "Windows"
+        mock_is_cuda.return_value = False
+        mock_get_vram.return_value = 6.0
+
+        with patch("ctranslate2.get_cuda_device_count", return_value=1):
+            profile = detect_hardware()
+            self.assertEqual(profile.device, "cpu")
+            self.assertEqual(profile.compute_type, "int8")
+            self.assertEqual(profile.recommended_model, "base")
+            self.assertTrue(any("cuBLAS" in w for w in profile.warnings))
 
 if __name__ == "__main__":
     unittest.main()

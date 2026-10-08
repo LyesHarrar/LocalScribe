@@ -43,11 +43,25 @@ def get_vram_gb() -> Optional[float]:
     return None
 
 def is_cuda_available() -> bool:
-    """Vérifie si CUDA est disponible pour CTranslate2 ou Torch."""
+    """Vérifie si CUDA est réellement opérationnel pour CTranslate2 ou Torch."""
     # 1. Vérification directe via CTranslate2 (notre moteur réel)
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
+            # Sur Windows, CTranslate2 nécessite impérativement les DLLs NVIDIA cuBLAS
+            import sys
+            if sys.platform == "win32":
+                import ctypes
+                found = False
+                for dll_name in ("cublas64_12.dll", "cublas64_11.dll"):
+                    try:
+                        ctypes.CDLL(dll_name)
+                        found = True
+                        break
+                    except Exception:
+                        pass
+                if not found:
+                    return False
             return True
     except Exception:
         pass
@@ -56,6 +70,13 @@ def is_cuda_available() -> bool:
     try:
         import torch
         if torch.cuda.is_available():
+            import sys
+            if sys.platform == "win32":
+                try:
+                    torch.zeros(1, device="cuda")
+                    return True
+                except Exception:
+                    return False
             return True
     except Exception:
         pass
@@ -71,6 +92,13 @@ def detect_hardware() -> HardwareProfile:
     vram_gb = None
 
     # 1. Vérification CUDA
+    has_nvidia_device = False
+    try:
+        import ctranslate2
+        has_nvidia_device = ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        pass
+
     if is_cuda_available():
         device = "cuda"
         vram_gb = get_vram_gb()
@@ -91,12 +119,18 @@ def detect_hardware() -> HardwareProfile:
         else:
             compute_type = "float16"
             recommended_model = "small"
-
     # 2. Vérification Apple Silicon Mac (ARM64)
     elif platform.system() == "Darwin" and platform.machine() == "arm64":
         device = "cpu"
         compute_type = "int8"
         recommended_model = "small"
+
+    elif has_nvidia_device:
+        vram_gb = get_vram_gb()
+        warnings.append(
+            "GPU NVIDIA détecté, mais bibliothèques cuBLAS (cublas64_12.dll) absentes de Windows. "
+            "Bascule automatique sur CPU multithreadé optimisé (int8)."
+        )
 
     return HardwareProfile(
         device=device,

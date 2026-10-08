@@ -712,7 +712,17 @@ def main():
     # VUE 1 : Configuration et Lancement / Bibliothèque
     # =========================================================================
     if not st.session_state.is_processing and not st.session_state.transcription_done:
-        
+        # Affichage d'un éventuel message d'erreur persistant
+        if st.session_state.get("last_error"):
+            col_err, col_dismiss = st.columns([6, 1])
+            with col_err:
+                st.error(f"⚠️ **Erreur lors du traitement précédent :** {st.session_state.last_error}")
+            with col_dismiss:
+                st.markdown("<div style='margin-top: 0.2rem;'></div>", unsafe_allow_html=True)
+                if st.button("✕ Fermer", key="btn_dismiss_last_error", use_container_width=True):
+                    del st.session_state["last_error"]
+                    st.rerun()
+
         # --- MODE 0 : HISTORIQUE & BIBLIOTHÈQUE ---
         if is_history_mode:
             render_history_view()
@@ -753,6 +763,7 @@ def main():
                 found_files = [
                     f for f in current_folder.rglob("*")
                     if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+                    and not f.name.startswith("ls_opt_")
                 ]
                 total_found = len(found_files)
                 already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
@@ -788,9 +799,15 @@ def main():
                         st.session_state.progress_pct = 0
                         st.session_state.status_label = "Démarrage du lot..."
                         st.session_state.current_file_name = ""
-                        st.session_state.current_file_idx = 0
+                        st.session_state.current_file_idx = 1
                         st.session_state.total_batch_files = total_found
                         st.session_state.latest_text = ""
+                        st.session_state.speed_str = "—"
+                        st.session_state.eta_str = "Calcul..."
+                        st.session_state.batch_eta_str = "Calcul..."
+                        st.session_state.batch_elapsed_str = "00:00"
+                        if "last_error" in st.session_state:
+                            del st.session_state["last_error"]
                         
                         t = threading.Thread(
                             target=transcribe_batch_threaded,
@@ -898,6 +915,12 @@ def main():
                     st.session_state.progress_pct = 0
                     st.session_state.status_label = "Initialisation..."
                     st.session_state.latest_text = ""
+                    st.session_state.speed_str = "—"
+                    st.session_state.eta_str = "Calcul..."
+                    st.session_state.batch_eta_str = "Calcul..."
+                    st.session_state.batch_elapsed_str = "00:00"
+                    if "last_error" in st.session_state:
+                        del st.session_state["last_error"]
                     
                     if len(saved_paths) == 1:
                         st.session_state.is_batch = False
@@ -978,7 +1001,8 @@ def main():
                 st.markdown(f"**Progression globale : Fichier {current_idx} / {total_files}** ({overall_progress}%)")
                 st.progress(overall_progress)
                 
-                st.markdown(f"Fichier en cours : `{file_name}` ({file_pct}%)")
+                curr_name_disp = f"`{file_name}` ({file_pct}%)" if file_name else "*(Initialisation du lot...)*"
+                st.markdown(f"Fichier en cours : {curr_name_disp}")
                 st.progress(file_pct)
 
                 # Bandeau d'estimation dynamique en lot (Vitesse, ETA fichier, ETA lot)
@@ -996,6 +1020,7 @@ def main():
                 </div>
                 """
                 st.markdown(batch_badge_html, unsafe_allow_html=True)
+                st.markdown(f"**Statut :** `{st.session_state.get('status_label', 'En cours...')}`")
             else:
                 progress_val = int(st.session_state.get("progress_pct", 0))
                 st.progress(progress_val)
@@ -1029,7 +1054,8 @@ def main():
             status = msg.get("status")
             
             if status == "loading_model":
-                st.session_state.status_label = "Chargement du modèle en mémoire GPU..."
+                mod_name = msg.get("model", "")
+                st.session_state.status_label = f"Chargement du modèle Whisper ({mod_name}) en mémoire..." if mod_name else "Chargement du modèle Whisper en mémoire..."
             elif status == "batch_discovered":
                 st.session_state.total_batch_files = msg.get("total_files", 1)
             elif status == "info_detected":
@@ -1128,9 +1154,13 @@ def main():
                         pass
 
                 st.rerun()
+            elif status == "warning":
+                st.toast(msg.get("warning", "Avertissement"), icon="⚠️")
             elif status == "error":
                 st.session_state.is_processing = False
-                st.error(f"Erreur durant la transcription : {msg.get('error')}")
+                err_text = str(msg.get("error", "Erreur durant la transcription"))
+                st.session_state.last_error = err_text
+                st.toast(f"Erreur : {err_text}", icon="🚨")
                 st.rerun()
             elif status == "stopped":
                 st.session_state.is_processing = False
