@@ -9,6 +9,7 @@ import sys
 import time
 import socket
 import signal
+import shutil
 import atexit
 import logging
 import webbrowser
@@ -17,7 +18,6 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-# Configuration des logs
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
@@ -25,9 +25,74 @@ logging.basicConfig(
 )
 logger = logging.getLogger("LocalScribe.Desktop")
 
-# Chemins fondamentaux
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
+
+def _setup_file_logging():
+    try:
+        log_file = get_project_root() / "desktop_app.log"
+        fh = logging.FileHandler(log_file, encoding="utf-8", mode="a")
+        fh.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s", "%H:%M:%S"))
+        logger.addHandler(fh)
+    except Exception:
+        pass
+
+
+def get_project_root() -> Path:
+    """
+    Retourne la racine réelle du projet LocalScribe.
+    Fonctionne en mode script de développement et en mode exécutable compilé (PyInstaller).
+    """
+    if getattr(sys, "frozen", False):
+        # En mode PyInstaller, sys.executable est le binaire LocalScribe.exe
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def get_python_executable() -> str:
+    """
+    Localise l'interpréteur Python approprié pour exécuter le serveur Streamlit.
+    1. Vérifie la présence d'un Python portable dans /python/python.exe (distribution ZIP).
+    2. En mode développement classique, utilise le sys.executable courant.
+    3. En mode binaire PyInstaller, cherche 'python.exe' sur le système.
+    """
+    root = get_project_root()
+    
+    # 1. Python portable embarqué (priorité absolue)
+    portable_python = root / "python" / ("python.exe" if sys.platform == "win32" else "bin/python3")
+    if portable_python.exists():
+        logger.info(f"Utilisation du Python portable : {portable_python}")
+        return str(portable_python.resolve())
+        
+    # 2. Mode développement (script python direct)
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+        
+    # 3. Mode exécutable PyInstaller : localiser python.exe dans le PATH
+    found = shutil.which("python") or shutil.which("py")
+    if found:
+        logger.info(f"Interpréteur Python détecté dans le PATH : {found}")
+        return found
+        
+    # 4. Chemins d'installation Windows standards
+    if sys.platform == "win32":
+        candidates = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python",
+            Path(os.environ.get("ProgramFiles", "")) / "Python",
+        ]
+        for base in candidates:
+            if base.exists():
+                for p in base.glob("Python*/python.exe"):
+                    if p.exists():
+                        logger.info(f"Python trouvé dans les dossiers standards : {p}")
+                        return str(p.resolve())
+                        
+    raise FileNotFoundError(
+        "Aucun interpréteur Python n'a été trouvé pour lancer l'interface Streamlit.\n"
+        "Veuillez vérifier que Python est installé ou qu'un dossier 'python/' portable est fourni."
+    )
+
+
+# Chemins fondamentaux résolus dynamiquement
+PROJECT_ROOT = get_project_root()
 APP_SCRIPT = PROJECT_ROOT / "ui" / "app.py"
 ICON_ICO = PROJECT_ROOT / "assets" / "logo.ico"
 ICON_PNG = PROJECT_ROOT / "assets" / "logo.png"
@@ -100,12 +165,15 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
     """
     global _server_process
     
-    target_app = app_path or APP_SCRIPT
+    root = get_project_root()
+    target_app = (app_path or (root / "ui" / "app.py")).resolve()
     if not target_app.exists():
         raise FileNotFoundError(f"Le fichier de l'interface Streamlit est introuvable : {target_app}")
         
+    python_exec = get_python_executable()
+    
     cmd = [
-        sys.executable,
+        python_exec,
         "-m", "streamlit", "run",
         str(target_app),
         "--server.port", str(port),
@@ -120,6 +188,10 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
     if sys.platform == "win32":
         creation_flags = subprocess.CREATE_NO_WINDOW
         
+    # Configurer l'environnement d'exécution
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
+    
     # Redirection des flux
     stdout_dest = subprocess.DEVNULL
     stderr_dest = subprocess.DEVNULL
@@ -128,10 +200,11 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
         stdout_dest = log_handle
         stderr_dest = log_handle
         
-    logger.info(f"Démarrage du serveur Streamlit sur le port {port}...")
+    logger.info(f"Démarrage du serveur Streamlit sur le port {port} (Python: {python_exec})...")
     _server_process = subprocess.Popen(
         cmd,
-        cwd=str(PROJECT_ROOT),
+        cwd=str(root),
+        env=env,
         stdout=stdout_dest,
         stderr=stderr_dest,
         creationflags=creation_flags
@@ -215,6 +288,10 @@ def launch_desktop():
     """
     Point d'entrée principal pour l'application de bureau native.
     """
+    _setup_file_logging()
+    root = get_project_root()
+    logger.info(f"Démarrage de LocalScribe (Root: {root})...")
+    
     # 1. Vérification des dépendances
     if not check_webview_dependencies():
         logger.error("Prérequis non satisfaits. Fermeture de l'application.")
@@ -232,8 +309,8 @@ def launch_desktop():
     # 3. Allocation de port
     port = find_available_port(8501)
     
-    # 4. Fichier de log optionnel dans le dossier de l'app
-    log_path = PROJECT_ROOT / "desktop_server.log"
+    # 4. Fichier de log dans le dossier de l'app
+    log_path = root / "desktop_server.log"
     
     # 5. Lancement de Streamlit en sous-processus masqué
     process = start_streamlit_server(port, log_file=log_path)
@@ -241,7 +318,10 @@ def launch_desktop():
     # 6. Attente de la disponibilité
     if not wait_for_server(port, timeout=30.0):
         cleanup_server(process)
-        sys.exit(1)
+        raise RuntimeError(
+            f"Le serveur Streamlit n'a pas répondu à temps sur le port {port}.\n"
+            f"Consultez '{log_path.name}' pour analyser l'erreur."
+        )
         
     # 7. Création de la fenêtre native pywebview
     import webview
