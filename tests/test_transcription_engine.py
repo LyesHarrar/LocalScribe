@@ -821,10 +821,119 @@ class TestTranscriptionEngine(unittest.TestCase):
             batch_complete = [m for m in messages if m["status"] == "batch_complete"][0]
             self.assertEqual(batch_complete["processed"], 2)
             self.assertEqual(batch_complete["total_files"], 2)
+            self.assertIn("total_elapsed_seconds", batch_complete)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_emits_eta_and_speed_metrics(self, mock_whisper_class):
+        """Vérifie que les métriques d'ETA, de vitesse et de temps écoulé sont émises dans la queue."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+
+        class DummyInfo:
+            duration = 60.0
+            language = "fr"
+            language_probability = 0.99
+
+        mock_model.transcribe.return_value = (
+            [DummySegment(0.0, 15.0, "Segment 1"), DummySegment(15.0, 30.0, "Segment 2")],
+            DummyInfo()
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio_eta.mp3"
+            fake_audio.write_bytes(b"content")
+
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            prog_msgs = [m for m in messages if m["status"] == "progress"]
+            self.assertEqual(len(prog_msgs), 2)
+            for pm in prog_msgs:
+                self.assertIn("speed_ratio", pm)
+                self.assertIn("speed_str", pm)
+                self.assertIn("eta_seconds", pm)
+                self.assertIn("eta_str", pm)
+                self.assertIn("elapsed_seconds", pm)
+                self.assertIn("elapsed_str", pm)
+
+            file_comp = [m for m in messages if m["status"] == "file_complete"][0]
+            self.assertIn("elapsed_seconds", file_comp)
+            self.assertIn("duration", file_comp)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_emits_batch_eta_metrics(self, mock_whisper_class):
+        """Vérifie que le traitement par lot propage l'ETA globale du lot."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummySegment:
+            start = 0.0
+            end = 10.0
+            text = "Segment batch"
+
+        class DummyInfo:
+            duration = 20.0
+            language = "fr"
+            language_probability = 0.95
+
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f1 = tmp_path / "b1.mp3"
+            f2 = tmp_path / "b2.mp3"
+            f1.write_bytes(b"1")
+            f2.write_bytes(b"2")
+
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_batch_threaded(
+                files=[f1, f2],
+                output_dir=tmp_path / "out",
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            prog_msgs = [m for m in messages if m["status"] == "progress"]
+            self.assertTrue(len(prog_msgs) >= 2)
+            for pm in prog_msgs:
+                self.assertIn("batch_eta_str", pm)
+                self.assertIn("batch_elapsed_str", pm)
+
+            batch_comp = [m for m in messages if m["status"] == "batch_complete"][0]
+            self.assertIn("total_elapsed_seconds", batch_comp)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

@@ -6,6 +6,7 @@ et l'identification des locuteurs (Speaker Diarization).
 """
 
 import os
+import time
 import queue
 import threading
 from pathlib import Path
@@ -85,6 +86,7 @@ def transcribe_file_threaded(
     """
     audio_to_transcribe = file_path
     pre_meta = {"preprocessed": False}
+    job_start_time = time.time()
     try:
         model_to_use = model_size if model_size else profile.recommended_model
         
@@ -147,6 +149,9 @@ def transcribe_file_threaded(
             "task": task
         })
 
+        from core.eta_calculator import ETACalculator
+        eta_calculator = ETACalculator()
+
         segments = []
         for segment in segments_gen:
             if stop_event.is_set():
@@ -155,13 +160,20 @@ def transcribe_file_threaded(
             
             segments.append(segment)
             percentage = (segment.end / duration) * 100 if duration > 0 else 0
+            eta_metrics = eta_calculator.update(segment.end, duration)
             progress_queue.put({
                 "status": "progress",
                 "file": str(file_path),
                 "percentage": min(100.0, percentage),
                 "current_time": segment.end,
                 "duration": duration,
-                "segment_text": segment.text
+                "segment_text": segment.text,
+                "speed_ratio": eta_metrics["speed_ratio"],
+                "speed_str": eta_metrics["speed_str"],
+                "eta_seconds": eta_metrics["eta_seconds"],
+                "eta_str": eta_metrics["eta_str"],
+                "elapsed_seconds": eta_metrics["elapsed_seconds"],
+                "elapsed_str": eta_metrics["elapsed_str"]
             })
 
         # Diarisation optionnelle des locuteurs
@@ -320,12 +332,15 @@ def transcribe_file_threaded(
         except Exception:
             pass
             
+        total_elapsed = time.time() - job_start_time
         progress_queue.put({
             "status": "file_complete",
             "file": str(file_path),
             "output_dir": str(output_dir),
             "language": detected_lang,
             "language_probability": lang_prob,
+            "duration": duration,
+            "elapsed_seconds": round(total_elapsed, 1),
             "task": task,
             "speakers": detected_speakers,
             "segments": serialized_segments,
@@ -433,6 +448,10 @@ def transcribe_batch_threaded(
         skipped_count = 0
         completed_files = []
 
+        from core.eta_calculator import ETACalculator, BatchETACalculator
+        batch_eta_calc = BatchETACalculator(total_files=total_files)
+        batch_start_time = time.time()
+
         # Instance de diarisation partagée si demandée
         diar_engine = None
         if diarize:
@@ -478,6 +497,9 @@ def transcribe_batch_threaded(
                 "current_idx": idx,
                 "total_files": total_files
             })
+
+            file_start_time = time.time()
+            file_eta_calc = ETACalculator()
 
             audio_to_transcribe = file_path
             pre_meta = {"preprocessed": False}
@@ -530,6 +552,11 @@ def transcribe_batch_threaded(
 
                 segments.append(segment)
                 percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                file_metrics = file_eta_calc.update(segment.end, duration)
+                batch_metrics = batch_eta_calc.estimate_batch_remaining(
+                    current_idx=idx,
+                    current_file_eta_seconds=file_metrics.get("eta_seconds")
+                )
                 progress_queue.put({
                     "status": "progress",
                     "file": str(file_path),
@@ -539,7 +566,17 @@ def transcribe_batch_threaded(
                     "percentage": min(100.0, percentage),
                     "current_time": segment.end,
                     "duration": duration,
-                    "segment_text": segment.text
+                    "segment_text": segment.text,
+                    "speed_ratio": file_metrics["speed_ratio"],
+                    "speed_str": file_metrics["speed_str"],
+                    "eta_seconds": file_metrics["eta_seconds"],
+                    "eta_str": file_metrics["eta_str"],
+                    "elapsed_seconds": file_metrics["elapsed_seconds"],
+                    "elapsed_str": file_metrics["elapsed_str"],
+                    "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
+                    "batch_eta_str": batch_metrics["batch_eta_str"],
+                    "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
+                    "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
                 })
 
             # Diarisation batch optionnelle
@@ -690,10 +727,14 @@ def transcribe_batch_threaded(
                 pass
 
             processed_count += 1
+            file_elapsed_total = time.time() - file_start_time
+            batch_eta_calc.record_file_completed(idx, file_elapsed_total)
+
             completed_info = {
                 "file_path": str(file_path),
                 "filename": file_path.name,
                 "duration": duration,
+                "elapsed_seconds": round(file_elapsed_total, 1),
                 "language": detected_lang,
                 "language_probability": lang_prob,
                 "speakers": detected_speakers,
@@ -722,6 +763,7 @@ def transcribe_batch_threaded(
                 "speakers": detected_speakers,
                 "segments": serialized_segments,
                 "duration": duration,
+                "elapsed_seconds": round(file_elapsed_total, 1),
                 "language": detected_lang,
                 "language_probability": lang_prob,
                 "target_translation": target_translation,
@@ -740,12 +782,14 @@ def transcribe_batch_threaded(
                     pass
 
         # 5. Fin du traitement par lot
+        batch_total_elapsed = time.time() - batch_start_time
         progress_queue.put({
             "status": "batch_complete",
             "total_files": total_files,
             "processed": processed_count,
             "skipped": skipped_count,
-            "files": completed_files
+            "files": completed_files,
+            "total_elapsed_seconds": round(batch_total_elapsed, 1)
         })
 
     except Exception as e:
