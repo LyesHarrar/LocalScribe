@@ -545,6 +545,80 @@ class TestTranscriptionEngine(unittest.TestCase):
                 self.assertIn("audio2.txt", namelist)
                 self.assertEqual(zf.read("audio1.txt").decode("utf-8"), "Texte 1")
 
+    @patch("core.transcription_engine.WhisperModel")
+    @patch("core.translation_engine.is_translation_model_installed", return_value=True)
+    @patch("core.translation_engine.get_translation_engine")
+    def test_transcribe_file_with_target_translation(
+        self, mock_get_trans_engine, mock_model_installed, mock_whisper_class
+    ):
+        """Vérifie que la transcription avec target_translation produit les fichiers traduits."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+
+        mock_model.transcribe.return_value = (
+            [DummySegment(0.0, 5.0, "Bonjour le monde")],
+            DummyInfo()
+        )
+
+        mock_trans_engine = MagicMock()
+        mock_get_trans_engine.return_value = mock_trans_engine
+
+        from core.translation_engine import TranslatedSegment
+        mock_trans_engine.translate_segments.return_value = [
+            TranslatedSegment(0.0, 5.0, "Hello world")
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio.mp3"
+            fake_audio.write_bytes(b"content")
+
+            out_dir = tmp_path / "out"
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                target_translation="en"
+            )
+
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+
+            statuses = [m["status"] for m in messages]
+            self.assertIn("translating", statuses)
+            self.assertIn("file_complete", statuses)
+
+            # Vérifier création des fichiers d'origine et traduits
+            self.assertTrue((out_dir / "audio.txt").exists())
+            self.assertTrue((out_dir / "audio_en.txt").exists())
+            self.assertTrue((out_dir / "audio_en.srt").exists())
+            self.assertTrue((out_dir / "audio_en.md").exists())
+
+            # Vérifier contenu
+            self.assertIn("Hello world", (out_dir / "audio_en.txt").read_text(encoding="utf-8"))
+
+            file_complete_msg = [m for m in messages if m["status"] == "file_complete"][0]
+            self.assertEqual(file_complete_msg["target_translation"], "en")
+            self.assertIn("Hello world", file_complete_msg["translated_text"])
+
 
 if __name__ == "__main__":
     unittest.main()
