@@ -56,9 +56,9 @@ def get_python_executable() -> str:
     """
     root = get_project_root()
     
-    # 1. Python portable embarqué (priorité absolue)
+    # 1. Python portable embarqué (priorité absolue à pythonw.exe sans console)
     if sys.platform == "win32":
-        for cand_name in ("python.exe", "pythonw.exe"):
+        for cand_name in ("pythonw.exe", "python.exe"):
             portable_python = root / "python" / cand_name
             if portable_python.is_file():
                 logger.info(f"Utilisation du Python portable : {portable_python}")
@@ -73,8 +73,8 @@ def get_python_executable() -> str:
     if not getattr(sys, "frozen", False):
         return sys.executable
         
-    # 3. Mode exécutable PyInstaller : localiser python.exe dans le PATH
-    found = shutil.which("python") or shutil.which("py")
+    # 3. Mode exécutable PyInstaller : localiser pythonw.exe ou python.exe dans le PATH
+    found = shutil.which("pythonw") or shutil.which("python") or shutil.which("py")
     if found:
         logger.info(f"Interpréteur Python détecté dans le PATH : {found}")
         return found
@@ -88,6 +88,10 @@ def get_python_executable() -> str:
         ]
         for base in candidates:
             if base.exists():
+                for p in sorted(base.glob("Python*/pythonw.exe"), reverse=True):
+                    if p.exists():
+                        logger.info(f"Python GUI trouvé dans les dossiers standards : {p}")
+                        return str(p.resolve())
                 for p in sorted(base.glob("Python*/python.exe"), reverse=True):
                     if p.exists():
                         logger.info(f"Python trouvé dans les dossiers standards : {p}")
@@ -200,10 +204,14 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
         "--global.developmentMode", "false"
     ]
     
-    # Masquer la console CMD sous Windows
+    # Masquer la console CMD sous Windows (Zéro Terminal)
     creation_flags = 0
+    startupinfo = None
     if sys.platform == "win32":
-        creation_flags = subprocess.CREATE_NO_WINDOW
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
         
     # Configuration des chemins d'accès CUDA / GPU
     try:
@@ -234,7 +242,8 @@ def start_streamlit_server(port: int, app_path: Optional[Path] = None, log_file:
         env=env,
         stdout=stdout_dest,
         stderr=stderr_dest,
-        creationflags=creation_flags
+        creationflags=creation_flags,
+        startupinfo=startupinfo
     )
     
     return _server_process
@@ -285,12 +294,19 @@ def cleanup_server(process: Optional[subprocess.Popen] = None):
     
     if sys.platform == "win32":
         try:
+            kwargs = {}
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            kwargs["startupinfo"] = si
             # Termine l'arborescence complète des processus (/T) de façon forcée (/F)
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(pid)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                check=False
+                check=False,
+                **kwargs
             )
         except Exception as e:
             logger.warning(f"Erreur lors de taskkill : {e}")

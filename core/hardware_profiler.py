@@ -4,6 +4,7 @@ import platform
 import subprocess
 import pathlib
 import logging
+import functools
 from dataclasses import dataclass, field
 from typing import Optional, List
 
@@ -106,24 +107,29 @@ class HardwareProfile:
     vram_gb: Optional[float] = None
     warnings: List[str] = field(default_factory=list)
 
+@functools.lru_cache(maxsize=1)
 def get_vram_gb() -> Optional[float]:
     """
-    Récupère la VRAM disponible sans dépendance obligatoire à PyTorch.
+    Récupère la VRAM disponible sans dépendance obligatoire à PyTorch (mis en cache).
     1. Tente via nvidia-smi (rapide, standard sur Windows & Linux)
     2. Tente via torch si présent
     """
     # 1. Tentative via nvidia-smi
     try:
-        creation_flags = 0
+        kwargs = {}
         if sys.platform == "win32":
-            creation_flags = subprocess.CREATE_NO_WINDOW
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            kwargs["startupinfo"] = si
         res = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             check=True,
             timeout=2,
-            creationflags=creation_flags
+            **kwargs
         )
         first_line = res.stdout.strip().splitlines()[0]
         return round(float(first_line) / 1024, 1)

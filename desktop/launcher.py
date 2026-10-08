@@ -108,10 +108,14 @@ def main():
         )
         sys.exit(1)
 
-    # Lancement du superviseur de bureau sans console (CREATE_NO_WINDOW)
+    # Lancement du superviseur de bureau sans console (CREATE_NO_WINDOW + SW_HIDE)
     creation_flags = 0
+    startupinfo = None
     if sys.platform == "win32":
         creation_flags = 0x08000000  # subprocess.CREATE_NO_WINDOW
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
 
     # Injection du dossier bin/ dans PATH pour assurer la disponibilité de FFmpeg
     bin_dir = app_dir / "bin"
@@ -126,7 +130,8 @@ def main():
             cmd,
             cwd=str(app_dir),
             env=env,
-            creationflags=creation_flags
+            creationflags=creation_flags,
+            startupinfo=startupinfo
         )
         proc.wait()
         sys.exit(proc.returncode)

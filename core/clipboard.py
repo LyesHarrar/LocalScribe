@@ -115,14 +115,19 @@ def copy_to_clipboard(text: str) -> bool:
     # 5. Windows fallback via PowerShell
     if sys.platform == "win32":
         try:
-            flags = 0x08000000 if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            kwargs = {}
+            kwargs["creationflags"] = 0x08000000 if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            kwargs["startupinfo"] = si
             subprocess.run(
                 ["powershell", "-NoProfile", "-Command", "$val = [Console]::In.ReadToEnd(); Set-Clipboard -Value $val"],
                 input=text,
                 text=True,
                 check=True,
                 timeout=3,
-                creationflags=flags
+                **kwargs
             )
             return True
         except Exception as e:

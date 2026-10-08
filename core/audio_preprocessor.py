@@ -11,6 +11,7 @@ import sys
 import shutil
 import logging
 import tempfile
+import functools
 import subprocess
 from pathlib import Path
 from uuid import uuid4
@@ -23,9 +24,25 @@ VIDEO_EXTENSIONS = {
 }
 
 
+def get_silent_windows_subprocess_kwargs() -> dict:
+    """
+    Retourne les arguments creationflags et startupinfo pour masquer
+    à 100% l'apparition furtive de consoles/terminaux sous Windows.
+    """
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = si
+    return kwargs
+
+
+@functools.lru_cache(maxsize=1)
 def find_ffmpeg_path() -> Optional[str]:
     """
-    Localise l'exécutable FFmpeg de manière exhaustive :
+    Localise l'exécutable FFmpeg de manière exhaustive (mis en cache pour 0 ms de surcoût) :
     1. Dans le dossier de l'application ou l'environnement portable LocalScribe
     2. Via le module imageio_ffmpeg s'il est présent
     3. Dans le PATH système
@@ -71,19 +88,20 @@ def find_ffmpeg_path() -> Optional[str]:
     return None
 
 
+@functools.lru_cache(maxsize=1)
 def is_ffmpeg_available() -> bool:
-    """Retourne True si FFmpeg est présent et opérationnel sur la machine."""
+    """Retourne True si FFmpeg est présent et opérationnel sur la machine (mis en cache)."""
     path = find_ffmpeg_path()
     if not path:
         return False
     try:
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        sub_kwargs = get_silent_windows_subprocess_kwargs()
         res = subprocess.run(
             [path, "-version"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=flags,
-            timeout=3.0
+            timeout=3.0,
+            **sub_kwargs
         )
         return res.returncode == 0
     except Exception:
@@ -185,15 +203,15 @@ def preprocess_audio(
         action_desc = "Extraction & Optimisation audio" if is_video_file(input_path) else "Optimisation acoustique"
         status_callback(f"⚡ {action_desc} en cours (16 kHz, Auto-Gain)...")
 
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    sub_kwargs = get_silent_windows_subprocess_kwargs()
 
     try:
         process = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=flags,
-            timeout=600.0  # 10 minutes max pour les très longs films
+            timeout=600.0,  # 10 minutes max pour les très longs films
+            **sub_kwargs
         )
 
         if process.returncode == 0 and optimized_path.exists() and optimized_path.stat().st_size > 0:
