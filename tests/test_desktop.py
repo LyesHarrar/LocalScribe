@@ -199,6 +199,22 @@ class TestPortablePackager(unittest.TestCase):
         self.assertIn("LocalScribe.exe", content)
         self.assertIn("100 % LOCAL", content)
         self.assertIn("CPU (Optimisé multi-cœurs)", content)
+        self.assertIn("LICENSES-THIRD-PARTY.txt", content)
+        self.assertIn("FFmpeg", content)
+
+    def test_batch_launcher_injects_bin_path(self):
+        """Vérifie que Lancer-LocalScribe.bat injecte bin/ dans le PATH."""
+        bat_file = create_batch_launcher(self.target_dir)
+        content = bat_file.read_text(encoding="utf-8")
+        self.assertIn("set \"PATH=%~dp0bin;%PATH%\"", content)
+
+    def test_package_structure_and_licenses(self):
+        """Vérifie la présence des fichiers de licence à la racine du projet."""
+        project_root = Path(__file__).resolve().parent.parent
+        self.assertTrue((project_root / "LICENSE").is_file(), "LICENSE doit exister")
+        self.assertTrue((project_root / "LICENSES-THIRD-PARTY.txt").is_file(), "LICENSES-THIRD-PARTY.txt doit exister")
+        self.assertTrue((project_root / "bin" / ".gitkeep").is_file(), "bin/.gitkeep doit exister")
+        self.assertTrue((project_root / "models" / ".gitkeep").is_file(), "models/.gitkeep doit exister")
 
     def test_get_copy_filter_standard(self):
         """Vérifie que le filtre ignore __pycache__, .pyc et les dossiers de doc."""

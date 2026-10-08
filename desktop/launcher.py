@@ -113,12 +113,19 @@ def main():
     if sys.platform == "win32":
         creation_flags = 0x08000000  # subprocess.CREATE_NO_WINDOW
 
+    # Injection du dossier bin/ dans PATH pour assurer la disponibilité de FFmpeg
+    bin_dir = app_dir / "bin"
+    env = os.environ.copy()
+    if bin_dir.is_dir():
+        env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+
     cmd = [python_exe, str(run_app_script)] + sys.argv[1:]
 
     try:
         proc = subprocess.Popen(
             cmd,
             cwd=str(app_dir),
+            env=env,
             creationflags=creation_flags
         )
         proc.wait()
