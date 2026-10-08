@@ -61,4 +61,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 2.0 — Notifications Natives Windows & Estimation du Temps Restant (ETA & Vitesse)** : *Implémentée et validée (calculateur d'ETA en temps réel et facteur de vitesse de traitement unitaire et par lot, bandeau dynamique sous la barre de progression, notifications toast natives Windows 10/11 sans console CREATE_NO_WINDOW avec carillon sonore discret, cartes métriques de temps de calcul et vitesse réelle, 99/99 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 2.0 prête pour validation PR (99/99 tests au vert).*
+*Dernière mise à jour par l'Agent : Version 2.0 mergée avec succès sur main (99/99 tests au vert).*
