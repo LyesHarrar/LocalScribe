@@ -51,6 +51,7 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Phase 3 — Desktop & Lanceur** : *Implémentée (run_app.py pywebview, détection WebView2, launcher.py et LocalScribe.exe).*
 - [x] **Version 1.1 — Fonctionnalités Audio Avancées** : *Implémentée (traduction anglaise directe, sélection 99 langues, filtre VAD Silero, prompt/vocabulaire, métriques de confiance).*
 - [x] **Version 1.2 — Diarisation des Locuteurs (Speaker Diarization)** : *Implémentée et validée (sherpa-onnx 100% hors-ligne & zéro token, segmentation PyAnnote ONNX + embedding CAM++, alignement Whisper, renommage interactif des locuteurs, 32/32 tests au vert).*
+- [x] **Version 1.3 — Historique Persistant & Recherche (SQLite)** : *Implémentée et validée (persistance automatique mono/batch, recherche textuelle plein champ, consultation et téléchargements rétroactifs, suppression/nettoyage, 36/36 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.2 mergée avec succès sur main.*
+*Dernière mise à jour par l'Agent : Version 1.3 terminée et validée sur feature/v1.3-transcription-history.*

@@ -204,6 +204,165 @@ def save_uploaded_file(uploaded_file) -> Path:
         f.write(uploaded_file.getbuffer())
     return file_path
 
+
+def render_history_view():
+    """Affiche la bibliothèque et l'historique complet des transcriptions."""
+    import streamlit_shadcn_ui as ui
+    from core.history_manager import (
+        get_records,
+        get_history_stats,
+        delete_record,
+        clear_history
+    )
+    
+    st.markdown("### :material/history: Bibliothèque & Historique des Transcriptions")
+    st.markdown("<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -0.25rem;'>Accédez à toutes vos transcriptions passées, recherchez par mot-clé et réexportez vos fichiers en un clic.</p>", unsafe_allow_html=True)
+    
+    # 1. Statistiques globales
+    stats = get_history_stats()
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        ui.metric_card(
+            label="Total Enregistré", 
+            value=f"{stats['total_count']} fichiers", 
+            description="Transcriptions mémorisées"
+        )
+    with col_s2:
+        ui.metric_card(
+            label="Volume Audio", 
+            value=f"{stats['total_duration_hours']:.1f} h", 
+            description=f"Soit ~{stats['total_duration_minutes']:.0f} minutes traitées"
+        )
+    with col_s3:
+        ui.metric_card(
+            label="Langues Rencontrées", 
+            value=str(stats['distinct_languages']), 
+            description="Langues sources distinctes"
+        )
+        
+    st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
+    
+    # 2. Barre de recherche et actions
+    col_search, col_action = st.columns([4.2, 1])
+    with col_search:
+        search_query = st.text_input(
+            "Recherche plein texte :",
+            placeholder="🔍 Filtrer par mot-clé, nom de fichier, locuteur (ex: Alice), langue...",
+            label_visibility="collapsed",
+            key="history_search_input"
+        )
+    with col_action:
+        if stats['total_count'] > 0:
+            if st.button("🗑️ Vider tout", type="secondary", use_container_width=True, help="Efface tout l'historique de la base locale"):
+                clear_history()
+                st.success("Historique vidé.")
+                st.rerun()
+
+    # 3. Récupération des enregistrements
+    records = get_records(query=search_query)
+    
+    if not records:
+        if search_query:
+            st.info(f"Aucune transcription ne correspond à votre recherche '{search_query}'.")
+        else:
+            st.info("Aucune transcription dans l'historique. Effectuez votre première transcription pour la voir apparaître ici !")
+        return
+        
+    st.markdown(f"<p style='color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;'>{len(records)} transcription(s) trouvée(s) :</p>", unsafe_allow_html=True)
+    
+    # 4. Affichage des fiches de transcription
+    for rec in records:
+        rec_id = rec["id"]
+        filename = rec["filename"]
+        created = rec["created_at"][:16].replace("T", " à ") if rec.get("created_at") else "Date inconnue"
+        duration_s = rec.get("duration", 0.0)
+        m, s = divmod(int(duration_s), 60)
+        h, m = divmod(m, 60)
+        dur_str = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+        speakers = rec.get("speakers", [])
+        spk_str = ", ".join(speakers) if speakers else "Non segmenté"
+        
+        with st.expander(f"📄 **{filename}** — *{created}* ({dur_str})", expanded=False):
+            # Métriques rapides
+            c1, c2, c3, c4 = st.columns(4)
+            c1.markdown(f"**Langue :** `{rec.get('language', 'auto').upper()}` ({rec.get('language_probability', 100):.0f}%)")
+            c2.markdown(f"**Tâche :** `{rec.get('task', 'transcribe')}`")
+            c3.markdown(f"**Modèle :** `{rec.get('model', 'medium')}`")
+            c4.markdown(f"**Locuteurs :** `{spk_str}`")
+            
+            st.markdown("<hr style='margin: 0.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            
+            # Aperçu du texte
+            txt_content = rec.get("transcript_text", "")
+            if not txt_content and rec.get("txt_path"):
+                p = Path(rec["txt_path"])
+                if p.exists():
+                    try:
+                        txt_content = p.read_text(encoding="utf-8")
+                    except Exception:
+                        pass
+                        
+            st.text_area(
+                "Texte de la transcription :",
+                value=txt_content,
+                height=180,
+                key=f"hist_txt_{rec_id}"
+            )
+            
+            # Boutons de téléchargement et suppression
+            col_d1, col_d2, col_d3, col_del = st.columns([1.5, 1.5, 1.5, 1])
+            with col_d1:
+                st.download_button(
+                    label="⬇️ .txt",
+                    data=txt_content,
+                    file_name=f"{Path(filename).stem}.txt",
+                    mime="text/plain",
+                    key=f"dl_txt_{rec_id}",
+                    use_container_width=True
+                )
+            with col_d2:
+                # Contenu Markdown
+                md_content = ""
+                if rec.get("md_path") and Path(rec["md_path"]).exists():
+                    try:
+                        md_content = Path(rec["md_path"]).read_text(encoding="utf-8")
+                    except Exception:
+                        pass
+                if not md_content:
+                    md_content = f"# Transcription de {filename}\n\n{txt_content}"
+                st.download_button(
+                    label="⬇️ .md",
+                    data=md_content,
+                    file_name=f"{Path(filename).stem}.md",
+                    mime="text/markdown",
+                    key=f"dl_md_{rec_id}",
+                    use_container_width=True
+                )
+            with col_d3:
+                # Contenu SRT
+                srt_content = ""
+                if rec.get("srt_path") and Path(rec["srt_path"]).exists():
+                    try:
+                        srt_content = Path(rec["srt_path"]).read_text(encoding="utf-8")
+                    except Exception:
+                        pass
+                if srt_content:
+                    st.download_button(
+                        label="⬇️ .srt",
+                        data=srt_content,
+                        file_name=f"{Path(filename).stem}.srt",
+                        mime="text/plain",
+                        key=f"dl_srt_{rec_id}",
+                        use_container_width=True
+                    )
+                else:
+                    st.caption("SRT non disponible")
+            with col_del:
+                if st.button("🗑️ Supprimer", key=f"del_rec_{rec_id}", use_container_width=True):
+                    delete_record(rec_id)
+                    st.rerun()
+
+
 def main():
     st.set_page_config(
         page_title="LocalScribe — Transcription Locale Haute Fidélité",
@@ -247,7 +406,11 @@ def main():
     # Sélecteur de Mode Segmenté moderne
     mode_selection = st.segmented_control(
         "Mode de transcription",
-        options=[":material/folder: Mode Dossier (Batch)", ":material/description: Mode Fichier Unique"],
+        options=[
+            ":material/folder: Mode Dossier (Batch)", 
+            ":material/description: Mode Fichier Unique",
+            ":material/history: Historique & Bibliothèque"
+        ],
         default=":material/folder: Mode Dossier (Batch)",
         selection_mode="single",
         label_visibility="collapsed",
@@ -256,14 +419,19 @@ def main():
     if not mode_selection:
         mode_selection = ":material/folder: Mode Dossier (Batch)"
     is_batch_mode = "Dossier" in mode_selection
+    is_history_mode = "Historique" in mode_selection
 
     # =========================================================================
-    # VUE 1 : Configuration et Lancement
+    # VUE 1 : Configuration et Lancement / Bibliothèque
     # =========================================================================
     if not st.session_state.is_processing and not st.session_state.transcription_done:
         
+        # --- MODE 0 : HISTORIQUE & BIBLIOTHÈQUE ---
+        if is_history_mode:
+            render_history_view()
+
         # --- MODE 1 : DOSSIER COMPLET (BATCH RÉCURSIF IN-PLACE) ---
-        if is_batch_mode:
+        elif is_batch_mode:
             st.markdown("### :material/folder: Sélection du dossier racine")
             st.markdown("""
             <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
