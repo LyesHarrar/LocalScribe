@@ -55,4 +55,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.4 — Distribution Portable Zéro Dépendance** : *Implémentée et validée (pipeline de packaging desktop/package_portable.py, CPython autonome embarqué sans installation requise, bootstrap launcher LocalScribe.exe ultra-léger avec fallback WebView2/navigateur et boîtes d'alerte natives ctypes, 46/46 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.4 prête pour fusion (PR).*
+*Dernière mise à jour par l'Agent : Version 1.4 mergée avec succès sur main.*
