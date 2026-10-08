@@ -83,7 +83,9 @@ def configure_cuda_paths() -> List[str]:
                     except Exception:
                         pass
                 # 2. Ajout au PATH du processus pour les bibliothèques C++ natives
-                os.environ["PATH"] = d_str + os.pathsep + os.environ.get("PATH", "")
+                current_path_parts = os.environ.get("PATH", "").split(os.pathsep)
+                if d_str not in current_path_parts:
+                    os.environ["PATH"] = d_str + os.pathsep + os.environ.get("PATH", "")
                 added.append(d_str)
 
     _CUDA_CONFIGURED = True
