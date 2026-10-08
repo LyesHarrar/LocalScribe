@@ -30,17 +30,27 @@ def generate_markdown(segments: List[Any], metadata: Dict[str, Any]) -> str:
     duration = metadata.get("duration", 0.0)
     language = metadata.get("language", "unknown")
     model = metadata.get("model", "unknown")
+    task = metadata.get("task")
+    lang_prob = metadata.get("language_probability")
     
-    md_content = f"""---
-title: "Transcription de {filename}"
-date: "{date_str}"
-duration_seconds: {duration:.2f}
-language: "{language}"
-model: "{model}"
----
-
-# Transcription
-
-"""
+    yaml_lines = [
+        "---",
+        f'title: "Transcription de {filename}"',
+        f'date: "{date_str}"',
+        f'duration_seconds: {duration:.2f}',
+        f'language: "{language}"',
+    ]
+    if lang_prob:
+        yaml_lines.append(f'language_confidence: "{lang_prob}"')
+    if task:
+        yaml_lines.append(f'task: "{task}"')
+    yaml_lines.extend([
+        f'model: "{model}"',
+        "---",
+        "",
+        "# Transcription",
+        "",
+    ])
+    md_content = "\n".join(yaml_lines) + "\n"
     md_content += generate_txt(segments)
     return md_content
