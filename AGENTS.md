@@ -60,4 +60,4 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.9 — Prétraitement Audio Intelligent & Extraction Rapide (FFmpeg Optimiseur)** : *Implémentée et validée (extraction audio ultra-rapide des flux vidéo .mp4/.mkv/.avi/.webm en WAV 16kHz mono 16-bit, égalisation dynamique Auto-Gain via dynaudnorm pour amplifier les voix chuchotées/faibles, réduction de bruit passe-bande et filtre spectral afftdn, repli automatique sans crash si FFmpeg absent, zéro pop-up terminal CREATE_NO_WINDOW, intégration complète mono-fichier/batch/dossier, suppression garantie des temporaires atomiques, 82/82 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.9 prête pour validation PR (82/82 tests au vert).*
+*Dernière mise à jour par l'Agent : Version 1.9 mergée avec succès sur main (82/82 tests au vert).*
