@@ -123,7 +123,7 @@ def render_badge(text: str, color: str = "#60a5fa", bg: str = "rgba(46, 116, 253
     return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{parsed_text}</span>"""
 
 def render_impact_card(est: ImpactEstimate):
-    """Affiche une carte dynamique d'estimation de performance et précision."""
+    """Affiche une carte dynamique d'estimation de performance et précision sans parsing markdown."""
     if est.speed_score >= 8:
         speed_color = "#34d399"
         speed_grad = "linear-gradient(90deg, #10b981, #34d399)"
@@ -154,50 +154,40 @@ def render_impact_card(est: ImpactEstimate):
     tips_html = ""
     if est.tips:
         tips_items = "".join([f"<li style='margin-bottom: 2px;'>{tip}</li>" for tip in est.tips])
-        tips_html = f"""
-        <div style="margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 0.73rem; color: #94a3b8;">
-            <ul style="margin: 0; padding-left: 1.1rem; line-height: 1.4;">
-                {tips_items}
-            </ul>
-        </div>
-        """
+        tips_html = f"<div style='margin-top: 0.5rem; padding-top: 0.4rem; border-top: 1px dashed rgba(255,255,255,0.08); font-size: 0.73rem; color: #94a3b8;'><ul style='margin: 0; padding-left: 1.1rem; line-height: 1.4;'>{tips_items}</ul></div>"
 
-    card_html = f"""
-    <div style="background: #11131a; border: 1px solid #232738; border-radius: 12px; padding: 0.85rem 1rem; margin: 0.75rem 0 1rem 0; box-shadow: 0 4px 16px rgba(0,0,0,0.25);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem;">
-            <span style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8;">Impact Estimé</span>
-            <span style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 7px; border-radius: 9999px; font-weight: 700;">⚡ ~{est.speed_factor:.1f}x réel</span>
-        </div>
-        
-        <div style="margin-bottom: 0.5rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;">
-                <span style="color: #cbd5e1;">Vitesse :</span>
-                <strong style="color: {speed_color};">{speed_text} ({est.speed_score}/10)</strong>
-            </div>
-            <div style="background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;">
-                <div style="background: {speed_grad}; width: {est.speed_score * 10}%; height: 100%; border-radius: 4px;"></div>
-            </div>
-        </div>
-        
-        <div style="margin-bottom: 0.5rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;">
-                <span style="color: #cbd5e1;">Précision :</span>
-                <strong style="color: {acc_color};">{est.accuracy_label} ({est.accuracy_score}/10)</strong>
-            </div>
-            <div style="background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;">
-                <div style="background: {acc_grad}; width: {est.accuracy_score * 10}%; height: 100%; border-radius: 4px;"></div>
-            </div>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.02); padding: 5px 8px; border-radius: 6px; font-size: 0.75rem; color: #94a3b8; border: 1px solid rgba(255,255,255,0.04);">
-            <span>⏱️</span>
-            <span>30 min d'audio traitées en : <strong style="color: #f1f5f9;">{est.est_30min_str}</strong></span>
-        </div>
-
-        {tips_html}
-    </div>
-    """
-    st.markdown(card_html, unsafe_allow_html=True)
+    card_html = (
+        f"<div style='background: #11131a; border: 1px solid #232738; border-radius: 12px; padding: 0.85rem 1rem; margin: 0.75rem 0 1rem 0; box-shadow: 0 4px 16px rgba(0,0,0,0.25);'>"
+        f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem;'>"
+        f"<span style='font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8;'>Impact Estimé</span>"
+        f"<span style='font-size: 0.72rem; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 7px; border-radius: 9999px; font-weight: 700;'>⚡ ~{est.speed_factor:.1f}x réel</span>"
+        f"</div>"
+        f"<div style='margin-bottom: 0.5rem;'>"
+        f"<div style='display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;'>"
+        f"<span style='color: #cbd5e1;'>Vitesse :</span>"
+        f"<strong style='color: {speed_color};'>{speed_text} ({est.speed_score}/10)</strong>"
+        f"</div>"
+        f"<div style='background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;'>"
+        f"<div style='background: {speed_grad}; width: {est.speed_score * 10}%; height: 100%; border-radius: 4px;'></div>"
+        f"</div>"
+        f"</div>"
+        f"<div style='margin-bottom: 0.5rem;'>"
+        f"<div style='display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 3px;'>"
+        f"<span style='color: #cbd5e1;'>Précision :</span>"
+        f"<strong style='color: {acc_color};'>{est.accuracy_label} ({est.accuracy_score}/10)</strong>"
+        f"</div>"
+        f"<div style='background: #1e2230; border-radius: 4px; height: 5px; overflow: hidden;'>"
+        f"<div style='background: {acc_grad}; width: {est.accuracy_score * 10}%; height: 100%; border-radius: 4px;'></div>"
+        f"</div>"
+        f"</div>"
+        f"<div style='display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.02); padding: 5px 8px; border-radius: 6px; font-size: 0.75rem; color: #94a3b8; border: 1px solid rgba(255,255,255,0.04);'>"
+        f"<span>⏱️</span>"
+        f"<span>30 min d'audio traitées en : <strong style='color: #f1f5f9;'>{est.est_30min_str}</strong></span>"
+        f"</div>"
+        f"{tips_html}"
+        f"</div>"
+    )
+    st.html(card_html)
 
 
 def render_sidebar():
@@ -819,7 +809,7 @@ def main():
     render_sidebar()
     
     # En-tête Principal de l'Application
-    col_header_title, col_header_actions = st.columns([3.8, 1.2], vertical_alignment="center")
+    col_header_title, col_act_guide, col_act_pop = st.columns([3.0, 0.9, 1.0], vertical_alignment="center")
     
     with col_header_title:
         st.markdown(f"""
@@ -841,72 +831,70 @@ def main():
         )
         st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
 
-    with col_header_actions:
-        col_act_guide, col_act_pop = st.columns([1, 1.1])
-        with col_act_guide:
-            with st.popover("❓ Guide", use_container_width=True):
-                st.markdown("### 🚀 Guide Express LocalScribe")
-                st.markdown(
-                    "**LocalScribe** est votre studio de transcription, diarisation et traduction "
-                    "**100% autonome, hors-ligne et respectueux de votre vie privée**."
-                )
-                st.divider()
-                st.markdown("#### 🏁 3 étapes simples :")
-                st.markdown("""
-                1. **📁 Sélectionnez vos médias :**
-                   - Glissez vos fichiers dans la **File d'attente**, ou
-                   - Sélectionnez un dossier complet en **Mode Dossier**.
-                2. **⚡ Choisissez un profil (Sidebar) :**
-                   - **⚡ Éclair :** Ultra-rapide (~11x à 15x temps réel). Idéal cours, réunions et contenus longs.
-                   - **⚖️ Équilibré (Recommandé) :** Le compromis idéal vitesse / fidélité orthographique.
-                   - **🎯 Studio :** Analyse approfondie mot à mot pour les interviews et jargons pointus.
-                3. **🚀 Lancez la transcription :**
-                   - Suivez la vitesse et l'ETA en direct. Une notification Windows vous préviendra dès que c'est prêt !
-                """)
-                st.divider()
-                st.markdown("#### 💡 Boîte à outils incluse :")
-                st.markdown("""
-                - **🗣️ Diarisation :** Identifie et sépare automatiquement qui parle (*Locuteur 1, Locuteur 2*).
-                - **🌐 Traduction NLLB-200 :** Traduit vers 24 langues sans aucune connexion Internet.
-                - **✏️ Éditeur Karaoké :** Cliquez sur un segment pour réécouter l'audio synchronisé au timecode.
-                - **📚 Historique :** Retrouvez tous vos fichiers, cherchez dedans et exportez (.txt, .srt, .md) à tout moment.
-                """)
-                st.divider()
-                st.caption("🛡️ 100% Hors-Ligne • Zéro Télémétrie • Vos fichiers restent sur votre machine.")
+    with col_act_guide:
+        with st.popover("❓ Guide", use_container_width=True):
+            st.markdown("### 🚀 Guide Express LocalScribe")
+            st.markdown(
+                "**LocalScribe** est votre studio de transcription, diarisation et traduction "
+                "**100% autonome, hors-ligne et respectueux de votre vie privée**."
+            )
+            st.divider()
+            st.markdown("#### 🏁 3 étapes simples :")
+            st.markdown("""
+            1. **📁 Sélectionnez vos médias :**
+               - Glissez vos fichiers dans la **File d'attente**, ou
+               - Sélectionnez un dossier complet en **Mode Dossier**.
+            2. **⚡ Choisissez un profil (Sidebar) :**
+               - **⚡ Éclair :** Ultra-rapide (~11x à 15x temps réel). Idéal cours, réunions et contenus longs.
+               - **⚖️ Équilibré (Recommandé) :** Le compromis idéal vitesse / fidélité orthographique.
+               - **🎯 Studio :** Analyse approfondie mot à mot pour les interviews et jargons pointus.
+            3. **🚀 Lancez la transcription :**
+               - Suivez la vitesse et l'ETA en direct. Une notification Windows vous préviendra dès que c'est prêt !
+            """)
+            st.divider()
+            st.markdown("#### 💡 Boîte à outils incluse :")
+            st.markdown("""
+            - **🗣️ Diarisation :** Identifie et sépare automatiquement qui parle (*Locuteur 1, Locuteur 2*).
+            - **🌐 Traduction NLLB-200 :** Traduit vers 24 langues sans aucune connexion Internet.
+            - **✏️ Éditeur Karaoké :** Cliquez sur un segment pour réécouter l'audio synchronisé au timecode.
+            - **📚 Historique :** Retrouvez tous vos fichiers, cherchez dedans et exportez (.txt, .srt, .md) à tout moment.
+            """)
+            st.divider()
+            st.caption("🛡️ 100% Hors-Ligne • Zéro Télémétrie • Vos fichiers restent sur votre machine.")
 
-        with col_act_pop:
-            with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
-                st.markdown(f"### LocalScribe `v{__version__}`")
-                st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
-                st.divider()
+    with col_act_pop:
+        with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
+            st.markdown(f"### LocalScribe `v{__version__}`")
+            st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
+            st.divider()
+            
+            st.markdown("#### 🔄 Mises à jour")
+            if "update_info" not in st.session_state:
+                st.session_state.update_info = None
                 
-                st.markdown("#### 🔄 Mises à jour")
-                if "update_info" not in st.session_state:
-                    st.session_state.update_info = None
+            if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
+                with st.spinner("Vérification sur GitHub Releases..."):
+                    st.session_state.update_info = check_for_updates()
                     
-                if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
-                    with st.spinner("Vérification sur GitHub Releases..."):
-                        st.session_state.update_info = check_for_updates()
-                        
-                up_info = st.session_state.update_info
-                if up_info:
-                    if up_info["status"] == "up_to_date":
-                        st.success(f"✅ {up_info['message']}")
-                    elif up_info["status"] == "update_available":
-                        st.info(f"🚀 **Nouvelle version {up_info['latest_version']} disponible !**")
-                        if up_info.get("release_notes"):
-                            with st.expander("Notes de version (Changelog)"):
-                                st.markdown(up_info["release_notes"])
-                        st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
-                    elif up_info["status"] == "no_release":
-                        st.info(f"ℹ️ {up_info['message']}")
-                    elif up_info["status"] == "offline":
-                        st.warning(f"🌐 {up_info['message']}")
-                    else:
-                        st.caption(f"⚠️ {up_info['message']}")
-                        
-                st.divider()
-                st.caption("Licence MIT • 100% Open-Source & Gratuit")
+            up_info = st.session_state.update_info
+            if up_info:
+                if up_info["status"] == "up_to_date":
+                    st.success(f"✅ {up_info['message']}")
+                elif up_info["status"] == "update_available":
+                    st.info(f"🚀 **Nouvelle version {up_info['latest_version']} disponible !**")
+                    if up_info.get("release_notes"):
+                        with st.expander("Notes de version (Changelog)"):
+                            st.markdown(up_info["release_notes"])
+                    st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
+                elif up_info["status"] == "no_release":
+                    st.info(f"ℹ️ {up_info['message']}")
+                elif up_info["status"] == "offline":
+                    st.warning(f"🌐 {up_info['message']}")
+                else:
+                    st.caption(f"⚠️ {up_info['message']}")
+                    
+            st.divider()
+            st.caption("Licence MIT • 100% Open-Source & Gratuit")
     
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 

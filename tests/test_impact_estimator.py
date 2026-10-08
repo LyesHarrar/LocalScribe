@@ -42,5 +42,19 @@ class TestImpactEstimator(unittest.TestCase):
         self.assertLess(est_cpu.speed_factor, 5.0)
         self.assertTrue(any("CPU détecté" in t for t in est_cpu.tips))
 
+    def test_render_impact_card_calls_st_html(self):
+        from unittest.mock import patch
+        from ui.app import render_impact_card
+        est = estimate_impact(device="cuda", model_size="small", beam_size=1)
+        with patch("ui.app.st.html") as mock_html:
+            render_impact_card(est)
+            mock_html.assert_called_once()
+            html_arg = mock_html.call_args[0][0]
+            self.assertIn("Impact Estimé", html_arg)
+            self.assertIn("⚡ ~", html_arg)
+            self.assertNotIn("```", html_arg)
+            self.assertTrue(html_arg.startswith("<div"))
+
 if __name__ == "__main__":
     unittest.main()
+
