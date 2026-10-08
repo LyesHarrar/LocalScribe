@@ -54,6 +54,7 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 1.3 — Historique Persistant & Recherche (SQLite)** : *Implémentée et validée (persistance automatique mono/batch, recherche textuelle plein champ, consultation et téléchargements rétroactifs, suppression/nettoyage, 36/36 tests au vert).*
 - [x] **Version 1.4 — Distribution Portable Zéro Dépendance** : *Implémentée et validée (pipeline de packaging desktop/package_portable.py, CPython autonome embarqué sans installation requise, bootstrap launcher LocalScribe.exe ultra-léger avec fallback WebView2/navigateur et boîtes d'alerte natives ctypes, 46/46 tests au vert).*
 - [x] **Version 1.5 — Copie Presse-Papier 1-Clic** : *Implémentée et validée (module core/clipboard.py multi-plateforme avec replis pyperclip/Win32 ctypes/PowerShell/pbcopy/wl-copy, boutons d'action rapide dans l'UI résultats, dans chaque onglet TXT/MD/SRT, dans les templates LLM et dans chaque fiche de l'historique, 53/53 tests au vert).*
+- [x] **Version 1.6 — Traitement par Lot & File d'Attente Multi-Fichiers (Batch Processing)** : *Implémentée et validée (dropzone multi-fichiers drag & drop avec accept_multiple_files, file d'attente séquentielle à la chaîne en thread d'arrière-plan, chargement unique du modèle Whisper, double barre de progression globale et par fichier, écritures atomiques, persistance SQLite individuelle, téléchargement global ZIP en mémoire, copie 1-clic de tout le lot, fiches interactives par fichier avec aperçu et exports individuels, 56/56 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Version 1.5 mergée avec succès sur main.*
+*Dernière mise à jour par l'Agent : Version 1.6 implémentée et validée.*

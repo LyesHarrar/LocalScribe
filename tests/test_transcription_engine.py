@@ -393,6 +393,160 @@ class TestTranscriptionEngine(unittest.TestCase):
             self.assertTrue(md_file.exists())
             self.assertIn('speakers: ["Locuteur 1"]', md_file.read_text(encoding="utf-8"))
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_files_queue_success(self, mock_whisper_class):
+        """Vérifie le traitement à la chaîne d'une liste explicite de fichiers (file d'attente)."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+                
+        class DummyInfo:
+            duration = 12.0
+            language = "fr"
+            language_probability = 0.98
+            
+        mock_model.transcribe.return_value = (
+            [DummySegment(0.0, 6.0, "Partie 1"), DummySegment(6.0, 12.0, "Partie 2")],
+            DummyInfo()
+        )
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f1 = tmp_path / "podcast_ep1.mp3"
+            f2 = tmp_path / "podcast_ep2.mp3"
+            f3 = tmp_path / "interview.wav"
+            for f in (f1, f2, f3):
+                f.write_bytes(b"dummy audio")
+                
+            out_dir = tmp_path / "custom_exports"
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                files=[f1, f2, f3],
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                export_srt=True,
+                export_md=True
+            )
+            
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+                
+            statuses = [m["status"] for m in messages]
+            self.assertIn("batch_discovered", statuses)
+            self.assertIn("loading_model", statuses)
+            self.assertIn("batch_complete", statuses)
+            
+            # Vérifier que les 3 fichiers ont été créés dans out_dir
+            for name in ("podcast_ep1", "podcast_ep2", "interview"):
+                self.assertTrue((out_dir / f"{name}.txt").exists())
+                self.assertTrue((out_dir / f"{name}.srt").exists())
+                self.assertTrue((out_dir / f"{name}.md").exists())
+                self.assertIn("Partie 1", (out_dir / f"{name}.txt").read_text(encoding="utf-8"))
+                
+            batch_complete_msg = [m for m in messages if m["status"] == "batch_complete"][0]
+            self.assertEqual(batch_complete_msg["total_files"], 3)
+            self.assertEqual(batch_complete_msg["processed"], 3)
+            self.assertEqual(len(batch_complete_msg["files"]), 3)
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_files_queue_smart_resume(self, mock_whisper_class):
+        """Vérifie que la file d'attente saute un fichier si son .txt existe déjà dans output_dir."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f1 = tmp_path / "deja_fait.mp3"
+            f2 = tmp_path / "a_faire.mp3"
+            f1.write_bytes(b"audio1")
+            f2.write_bytes(b"audio2")
+            
+            out_dir = tmp_path / "output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            # Simuler un fichier déjà transcrit
+            (out_dir / "deja_fait.txt").write_text("Déjà transcrit précédemment", encoding="utf-8")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                files=[f1, f2],
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+            
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+                
+            statuses = [m["status"] for m in messages]
+            self.assertIn("file_skipped", statuses)
+            
+            batch_complete_msg = [m for m in messages if m["status"] == "batch_complete"][0]
+            self.assertEqual(batch_complete_msg["total_files"], 2)
+            self.assertEqual(batch_complete_msg["processed"], 1)
+            self.assertEqual(batch_complete_msg["skipped"], 1)
+
+    def test_create_batch_zip(self):
+        """Vérifie la génération en mémoire de l'archive ZIP contenant tous les fichiers d'export."""
+        import zipfile
+        import io
+        from ui.app import create_batch_zip
+        
+        # Cas 1 : liste vide
+        self.assertEqual(create_batch_zip([]), b"")
+        
+        # Cas 2 : fichiers réels
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            txt1 = tmp_path / "audio1.txt"
+            srt1 = tmp_path / "audio1.srt"
+            txt2 = tmp_path / "audio2.txt"
+            
+            txt1.write_text("Texte 1", encoding="utf-8")
+            srt1.write_text("00:00:00 --> 00:00:05\nTexte 1", encoding="utf-8")
+            txt2.write_text("Texte 2", encoding="utf-8")
+            
+            files_meta = [
+                {"filename": "audio1.mp3", "txt_path": str(txt1), "srt_path": str(srt1), "md_path": ""},
+                {"filename": "audio2.mp3", "txt_path": str(txt2), "srt_path": "", "md_path": ""}
+            ]
+            
+            zip_bytes = create_batch_zip(files_meta)
+            self.assertTrue(len(zip_bytes) > 0)
+            
+            # Vérifier le contenu de l'archive ZIP
+            with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+                namelist = zf.namelist()
+                self.assertIn("audio1.txt", namelist)
+                self.assertIn("audio1.srt", namelist)
+                self.assertIn("audio2.txt", namelist)
+                self.assertEqual(zf.read("audio1.txt").decode("utf-8"), "Texte 1")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
