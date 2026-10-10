@@ -542,6 +542,22 @@ def transcribe_batch_threaded(
             "target_dir": str(target_dir) if target_dir else str(output_dir or "")
         })
 
+        # Initialisation du suivi persistant du lot dans SQLite
+        batch_run_id = None
+        folder_for_run = str(target_path) if target_dir else (str(output_dir or Path(all_files[0]).parent) if all_files else None)
+        folder_name_for_run = target_path.name if target_dir else (f"Lot de {total_files} fichiers" if all_files else "Lot")
+        if folder_for_run:
+            try:
+                from core.history_manager import create_batch_run
+                batch_run_id = create_batch_run(
+                    folder_path=folder_for_run,
+                    total_files=total_files,
+                    folder_name=folder_name_for_run,
+                    skipped_files=0
+                )
+            except Exception as bre:
+                logger.warning(f"Impossible de créer l'entrée batch_run dans l'historique : {bre}")
+
         # 2. Chargement unique du modèle en mémoire pour tout le lot
         model_to_use = model_size if model_size else (profile.recommended_model if profile else "small")
         progress_queue.put({"status": "loading_model", "model": model_to_use})
@@ -591,6 +607,18 @@ def transcribe_batch_threaded(
         # 3. Boucle sur tous les fichiers de la file d'attente
         for idx, file_path in enumerate(all_files, start=1):
             if stop_event and stop_event.is_set():
+                if batch_run_id:
+                    try:
+                        from core.history_manager import finish_batch_run
+                        finish_batch_run(
+                            batch_id=batch_run_id,
+                            status="interrupted",
+                            processed_files=processed_count,
+                            skipped_files=skipped_count,
+                            elapsed_seconds=time.time() - batch_start_time
+                        )
+                    except Exception:
+                        pass
                 progress_queue.put({"status": "stopped", "processed": processed_count, "skipped": skipped_count})
                 return
 
@@ -610,6 +638,18 @@ def transcribe_batch_threaded(
             # Smart Resume : si le .txt existe et est non vide, on passe
             if out_txt.exists() and out_txt.stat().st_size > 0:
                 skipped_count += 1
+                if batch_run_id:
+                    try:
+                        from core.history_manager import update_batch_run_progress
+                        update_batch_run_progress(
+                            batch_id=batch_run_id,
+                            current_file=file_path.name,
+                            processed_files=processed_count,
+                            skipped_files=skipped_count,
+                            elapsed_seconds=time.time() - batch_start_time
+                        )
+                    except Exception:
+                        pass
                 progress_queue.put({
                     "status": "file_skipped",
                     "file": str(file_path),
@@ -937,6 +977,19 @@ def transcribe_batch_threaded(
             file_elapsed_total = time.time() - file_start_time
             batch_eta_calc.record_file_completed(idx, file_elapsed_total)
 
+            if batch_run_id:
+                try:
+                    from core.history_manager import update_batch_run_progress
+                    update_batch_run_progress(
+                        batch_id=batch_run_id,
+                        current_file=file_path.name,
+                        processed_files=processed_count,
+                        skipped_files=skipped_count,
+                        elapsed_seconds=time.time() - batch_start_time
+                    )
+                except Exception:
+                    pass
+
             completed_info = {
                 "file_path": str(file_path),
                 "filename": file_path.name,
@@ -990,6 +1043,19 @@ def transcribe_batch_threaded(
 
         # 5. Fin du traitement par lot
         batch_total_elapsed = time.time() - batch_start_time
+        if batch_run_id:
+            try:
+                from core.history_manager import finish_batch_run
+                finish_batch_run(
+                    batch_id=batch_run_id,
+                    status="completed",
+                    processed_files=processed_count,
+                    skipped_files=skipped_count,
+                    elapsed_seconds=batch_total_elapsed
+                )
+            except Exception:
+                pass
+
         progress_queue.put({
             "status": "batch_complete",
             "total_files": total_files,
@@ -1000,4 +1066,17 @@ def transcribe_batch_threaded(
         })
 
     except Exception as e:
+        if 'batch_run_id' in locals() and batch_run_id:
+            try:
+                from core.history_manager import finish_batch_run
+                finish_batch_run(
+                    batch_id=batch_run_id,
+                    status="error",
+                    processed_files=processed_count if 'processed_count' in locals() else 0,
+                    skipped_files=skipped_count if 'skipped_count' in locals() else 0,
+                    failed_files=1,
+                    elapsed_seconds=time.time() - batch_start_time if 'batch_start_time' in locals() else 0.0
+                )
+            except Exception:
+                pass
         progress_queue.put({"status": "error", "error": str(e)})

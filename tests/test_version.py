@@ -21,14 +21,14 @@ class TestVersionModule(unittest.TestCase):
 
     def test_metadata_constants(self):
         """Vérifie la validité des métadonnées du projet."""
-        self.assertEqual(__version__, "2.2.1")
+        self.assertEqual(__version__, "2.4.0")
         self.assertEqual(__author__, "Lyes Harrar")
         self.assertIn("LyesHarrar/LocalScribe", __github_repo__)
         self.assertEqual(__github_author__, "https://github.com/LyesHarrar")
 
     def test_parse_semver(self):
         """Vérifie le parsing des versions semver."""
-        self.assertEqual(parse_semver("v2.2.1"), (2, 2, 1))
+        self.assertEqual(parse_semver("v2.4.0"), (2, 4, 0))
         self.assertEqual(parse_semver("2.1.4"), (2, 1, 4))
         self.assertEqual(parse_semver("v1.5"), (1, 5, 0))
         self.assertEqual(parse_semver("3"), (3, 0, 0))
@@ -37,34 +37,34 @@ class TestVersionModule(unittest.TestCase):
 
     def test_compare_versions(self):
         """Vérifie la logique de comparaison de versions."""
-        self.assertEqual(compare_versions("v2.3.0", "v2.2.1"), 1)
-        self.assertEqual(compare_versions("v2.2.1", "v2.2.1"), 0)
-        self.assertEqual(compare_versions("2.2.1", "v2.2.1"), 0)
-        self.assertEqual(compare_versions("v1.9.9", "v2.2.1"), -1)
-        self.assertEqual(compare_versions("v2.2.2", "v2.2.1"), 1)
+        self.assertEqual(compare_versions("v2.5.0", "v2.4.0"), 1)
+        self.assertEqual(compare_versions("v2.4.0", "v2.4.0"), 0)
+        self.assertEqual(compare_versions("2.4.0", "v2.4.0"), 0)
+        self.assertEqual(compare_versions("v2.3.9", "v2.4.0"), -1)
+        self.assertEqual(compare_versions("v2.4.1", "v2.4.0"), 1)
 
     @patch("urllib.request.urlopen")
     def test_check_for_updates_update_available(self, mock_urlopen):
         """Vérifie la détection d'une mise à jour plus récente."""
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.read.return_value = b'{"tag_name": "v2.3.0", "html_url": "https://github.com/LyesHarrar/LocalScribe/releases/tag/v2.3.0", "name": "Release v2.3.0", "body": "Nouveautes"}'
+        mock_response.read.return_value = b'{"tag_name": "v2.5.0", "html_url": "https://github.com/LyesHarrar/LocalScribe/releases/tag/v2.5.0", "name": "Release v2.5.0", "body": "Nouveautes"}'
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
-        res = check_for_updates(current_version="2.2.1")
+        res = check_for_updates(current_version="2.4.0")
         self.assertEqual(res["status"], "update_available")
-        self.assertEqual(res["latest_version"], "v2.3.0")
-        self.assertIn("v2.3.0", res["message"])
+        self.assertEqual(res["latest_version"], "v2.5.0")
+        self.assertIn("v2.5.0", res["message"])
 
     @patch("urllib.request.urlopen")
     def test_check_for_updates_up_to_date(self, mock_urlopen):
         """Vérifie le statut lorsque la version actuelle est la plus récente."""
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.read.return_value = b'{"tag_name": "v2.2.1", "html_url": "https://github.com/LyesHarrar/LocalScribe/releases/tag/v2.2.1"}'
+        mock_response.read.return_value = b'{"tag_name": "v2.4.0", "html_url": "https://github.com/LyesHarrar/LocalScribe/releases/tag/v2.4.0"}'
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
-        res = check_for_updates(current_version="2.2.1")
+        res = check_for_updates(current_version="2.4.0")
         self.assertEqual(res["status"], "up_to_date")
         self.assertIn("à jour", res["message"])
 
@@ -75,7 +75,7 @@ class TestVersionModule(unittest.TestCase):
             url="http://fake", code=404, msg="Not Found", hdrs={}, fp=None
         )
 
-        res = check_for_updates(current_version="2.2.1")
+        res = check_for_updates(current_version="2.4.0")
         self.assertEqual(res["status"], "no_release")
         self.assertIn("Aucune release", res["message"])
 
@@ -84,7 +84,7 @@ class TestVersionModule(unittest.TestCase):
         """Vérifie le repli gracieux sans exception en cas de mode hors-ligne."""
         mock_urlopen.side_effect = urllib.error.URLError("Network is unreachable")
 
-        res = check_for_updates(current_version="2.2.1")
+        res = check_for_updates(current_version="2.4.0")
         self.assertEqual(res["status"], "offline")
         self.assertIn("Hors-Ligne", res["message"])
 

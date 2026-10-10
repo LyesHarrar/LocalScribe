@@ -559,11 +559,13 @@ def render_history_view():
         get_records,
         get_history_stats,
         delete_record,
-        clear_history
+        clear_history,
+        get_folder_progress_summary,
+        get_batch_runs
     )
     
     st.markdown("### :material/history: Bibliothèque & Historique des Transcriptions")
-    st.markdown("<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -0.25rem;'>Accédez à toutes vos transcriptions passées, recherchez par mot-clé et réexportez vos fichiers en un clic.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -0.25rem;'>Accédez à toutes vos transcriptions passées, retrouvez vos dossiers récents et réexportez vos fichiers en un clic.</p>", unsafe_allow_html=True)
     
     # 1. Statistiques globales
     stats = get_history_stats()
@@ -587,7 +589,110 @@ def render_history_view():
             description="Langues sources distinctes"
         )
         
-    st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+
+    # 1.5. Dernier dossier retranscrit & Suivi d'avancement
+    folder_summary = get_folder_progress_summary()
+    if folder_summary:
+        f_name = folder_summary["folder_name"]
+        f_path = folder_summary["folder_path"]
+        f_pct = folder_summary["progress_pct"]
+        f_total = folder_summary["total_files"]
+        f_done = folder_summary["disk_done"] if folder_summary.get("disk_exists") else (folder_summary["processed_files"] + folder_summary["skipped_files"])
+        f_remaining = folder_summary["disk_remaining"] if folder_summary.get("disk_exists") else max(0, f_total - f_done)
+        f_status = folder_summary.get("status", "unknown")
+
+        if f_pct >= 100.0 or f_remaining == 0:
+            status_badge = "🟢 Terminé (100 %)"
+            status_color = "#22c55e"
+        elif f_status == "interrupted":
+            status_badge = f"🟡 Interrompu ({f_pct:.0f} %)"
+            status_color = "#eab308"
+        elif f_status == "in_progress":
+            status_badge = f"🔵 En cours ({f_pct:.0f} %)"
+            status_color = "#3b82f6"
+        else:
+            status_badge = f"⚪ {f_pct:.0f} % terminé"
+            status_color = "#94a3b8"
+
+        st.markdown(f"""
+        <div style="background: linear-gradient(145deg, #18181b 0%, #1f2023 100%); border: 1px solid #27272a; border-radius: 12px; padding: 1.15rem 1.25rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 1.25rem;">📁</span>
+                    <strong style="font-size: 1.05rem; color: #f8fafc;">Dernier dossier retranscrit : {f_name}</strong>
+                </div>
+                <span style="font-size: 0.85rem; font-weight: 600; padding: 0.2rem 0.65rem; border-radius: 9999px; background: rgba(255,255,255,0.06); border: 1px solid #3f3f46; color: {status_color};">
+                    {status_badge}
+                </span>
+            </div>
+            <div style="color: #94a3b8; font-size: 0.82rem; font-family: monospace; word-break: break-all; margin-bottom: 0.75rem;">
+                📂 {f_path}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.progress(min(1.0, max(0.0, f_pct / 100.0)))
+
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        with col_f1:
+            ui.metric_card(label="Avancement Global", value=f"{f_pct:.1f} %", description=f"{f_done} / {f_total} fichier(s)")
+        with col_f2:
+            ui.metric_card(label="Déjà Transcrits", value=str(f_done), description="Fichiers prêts (.txt)")
+        with col_f3:
+            ui.metric_card(label="Restants à Traiter", value=str(f_remaining), description="Vidéos / audios à convertir")
+        with col_f4:
+            el_sec = folder_summary.get("elapsed_seconds", 0.0)
+            m, s = divmod(int(el_sec), 60)
+            h, m = divmod(m, 60)
+            t_lbl = f"{h}h {m:02d}m" if h > 0 else f"{m:02d}m {s:02d}s" if m > 0 else f"{s}s"
+            ui.metric_card(label="Temps Écoulé", value=t_lbl if el_sec > 0 else "—", description="Dernière session")
+
+        st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+        col_act1, col_act2, col_act3 = st.columns([2.2, 1.8, 1.5])
+        with col_act1:
+            if st.button("▶️ Reprendre ce dossier en 1-clic", key="btn_resume_folder_hist", type="primary", use_container_width=True, help="Charge automatiquement ce dossier en Mode Dossier pour continuer la transcription des fichiers restants"):
+                st.session_state.target_folder = f_path
+                st.session_state.force_folder_rescan = True
+                st.session_state.pending_mode_switch = ":material/folder: Mode Dossier (Scan Récursif)"
+                st.toast(f"Dossier '{f_name}' chargé en Mode Dossier !", icon="📁")
+                st.rerun()
+        with col_act2:
+            if st.button("📂 Ouvrir dans l'Explorateur", key="btn_open_folder_hist", use_container_width=True, help="Ouvre le dossier dans l'explorateur de fichiers Windows"):
+                open_folder_in_explorer(Path(f_path))
+        with col_act3:
+            if st.button("📋 Copier le chemin", key="btn_copy_folder_hist", use_container_width=True, help="Copie le chemin complet dans le presse-papier"):
+                if copy_to_clipboard(f_path):
+                    st.toast("Chemin du dossier copié !", icon="📋")
+                else:
+                    st.error("Impossible d'accéder au presse-papier.")
+
+        all_runs = get_batch_runs(limit=10)
+        if len(all_runs) > 1:
+            with st.expander(f"📚 Historique des autres sessions de lots & dossiers ({len(all_runs) - 1})", expanded=False):
+                for r in all_runs[1:]:
+                    r_id = r["id"]
+                    r_name = r["folder_name"]
+                    r_p = r["folder_path"]
+                    r_pct = r.get("progress_pct", 0.0)
+                    r_date = r["started_at"][:16].replace("T", " à ") if r.get("started_at") else "Date inconnue"
+                    r_done = r.get("processed_files", 0) + r.get("skipped_files", 0)
+                    r_tot = r.get("total_files", 0)
+                    
+                    c_info, c_btn = st.columns([4, 1.2], vertical_alignment="center")
+                    with c_info:
+                        st.markdown(f"**📁 {r_name}** — *{r_date}* — `{r_done}/{r_tot}` fichiers ({r_pct:.0f} %)")
+                        st.caption(f"`{r_p}`")
+                    with c_btn:
+                        if st.button("Charger", key=f"btn_load_batch_run_{r_id}", use_container_width=True):
+                            st.session_state.target_folder = r_p
+                            st.session_state.force_folder_rescan = True
+                            st.session_state.pending_mode_switch = ":material/folder: Mode Dossier (Scan Récursif)"
+                            st.toast(f"Dossier '{r_name}' chargé !", icon="📁")
+                            st.rerun()
+                    st.markdown("<hr style='margin: 0.3rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
     
     # 2. Barre de recherche et actions
     col_search, col_action = st.columns([4.2, 1])
@@ -799,6 +904,10 @@ def render_history_view():
                                 use_container_width=True
                             )
 
+            # Studio IA & Synthèse pour l'historique
+            with st.expander("🤖 Studio IA & Synthèse...", expanded=False):
+                render_llm_templates(transcription_text=txt_content, key_prefix=f"hist_{rec_id}")
+
 
 def main():
     st.set_page_config(
@@ -923,6 +1032,16 @@ def main():
 
     import streamlit_shadcn_ui as ui
 
+    DEFAULT_MODE = ":material/upload_file: File d'attente (Multi-Fichiers)"
+    if "current_active_mode" not in st.session_state:
+        st.session_state.current_active_mode = DEFAULT_MODE
+
+    # Application d'un changement de mode programmé (ex: clic depuis l'historique) avant instanciation du widget
+    if "pending_mode_switch" in st.session_state:
+        target_mode = st.session_state.pop("pending_mode_switch")
+        st.session_state.current_active_mode = target_mode
+        st.session_state.mode_segmented_control = target_mode
+
     # Sélecteur de Mode Segmenté moderne
     is_busy = st.session_state.get("is_processing", False)
     mode_selection = st.segmented_control(
@@ -932,7 +1051,7 @@ def main():
             ":material/folder: Mode Dossier (Scan Récursif)",
             ":material/history: Historique & Bibliothèque"
         ],
-        default=":material/upload_file: File d'attente (Multi-Fichiers)",
+        default=st.session_state.current_active_mode,
         selection_mode="single",
         label_visibility="collapsed",
         disabled=is_busy,
@@ -941,15 +1060,24 @@ def main():
     if is_busy:
         st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
 
+    # Protection contre la déselection involontaire (clic sur l'onglet déjà actif)
     if not mode_selection:
-        mode_selection = ":material/upload_file: File d'attente (Multi-Fichiers)"
+        mode_selection = st.session_state.current_active_mode
+        st.session_state.mode_segmented_control = mode_selection
+    elif mode_selection != st.session_state.current_active_mode:
+        st.session_state.current_active_mode = mode_selection
+        # Si une précédente transcription était achevée, quitter la vue de résultat lors du changement d'onglet
+        if st.session_state.get("transcription_done", False):
+            st.session_state.transcription_done = False
+            st.rerun()
+
     is_folder_mode = "Dossier" in mode_selection
     is_history_mode = "Historique" in mode_selection
 
     # =========================================================================
     # VUE 1 : Configuration et Lancement / Bibliothèque
     # =========================================================================
-    if not st.session_state.is_processing and not st.session_state.transcription_done:
+    if not st.session_state.is_processing and (not st.session_state.transcription_done or is_history_mode):
         # Affichage d'un éventuel message d'erreur persistant
         if st.session_state.get("last_error"):
             col_err, col_dismiss = st.columns([6, 1])
@@ -1673,6 +1801,10 @@ def main():
                                 key_prefix=f"batch_{idx}"
                             )
 
+                        # Studio IA & Synthèse pour ce fichier du lot
+                        with st.expander(f"🤖 Studio IA & Synthèse ({cf_name})", expanded=False):
+                            render_llm_templates(transcription_text=cf_text, key_prefix=f"batch_{idx}")
+
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
             if st.button(reset_label, use_container_width=True, key="btn_reset_batch"):
@@ -1796,7 +1928,7 @@ def main():
                 ":material/markdown: Markdown (.md)", 
                 "⏱️ Sous-titres (.srt)", 
                 "🌐 Traduction Hors-Ligne",
-                "🤖 Prompts LLM"
+                ":material/smart_toy: Studio IA & Synthèse"
             ])
             
             with tab_edit:
@@ -1982,7 +2114,7 @@ def main():
                         st.info("Sélectionnez les langues et cliquez sur '🌐 Traduire' pour générer la version traduite.")
                 
             with tab_llm:
-                render_llm_templates(transcription_text=txt_text)
+                render_llm_templates(transcription_text=txt_text, key_prefix=f"single_{base_name}")
                 
             st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
             if st.button(":material/sync: Nouvelle transcription", use_container_width=True):
