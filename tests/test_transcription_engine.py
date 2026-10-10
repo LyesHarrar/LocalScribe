@@ -1095,8 +1095,67 @@ class TestTranscriptionEngine(unittest.TestCase):
             _, kwargs = mock_model.transcribe.call_args
             self.assertEqual(kwargs.get("beam_size"), 1)
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_records_batch_run_in_history(self, mock_whisper_class):
+        """Vérifie que la transcription par dossier enregistre fidèlement la session batch_run et sa complétion."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.99
+            
+        class DummySegment:
+            start = 0.0
+            end = 5.0
+            text = "Bonjour dans le dossier"
+            speaker = "Locuteur 1"
+            
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            folder = tmp_path / "MonDossier"
+            folder.mkdir()
+            
+            f1 = folder / "video1.mp4"
+            f2 = folder / "video2.mp4"
+            f1.write_bytes(b"content1")
+            f2.write_bytes(b"content2")
+            
+            test_db = tmp_path / "test_hist.db"
+            
+            with patch("core.history_manager.get_default_db_path", return_value=test_db):
+                q = queue.Queue()
+                stop_event = threading.Event()
+                profile = HardwareProfile("cpu", "int8", "small")
+                
+                transcribe_batch_threaded(
+                    target_dir=folder,
+                    profile=profile,
+                    progress_queue=q,
+                    stop_event=stop_event
+                )
+                
+                from core.history_manager import get_last_batch_run, get_folder_progress_summary
+                last_run = get_last_batch_run(db_path=test_db)
+                self.assertIsNotNone(last_run)
+                self.assertEqual(last_run["folder_name"], "MonDossier")
+                self.assertEqual(last_run["status"], "completed")
+                self.assertEqual(last_run["total_files"], 2)
+                self.assertEqual(last_run["processed_files"], 2)
+                
+                summary = get_folder_progress_summary(db_path=test_db)
+                self.assertIsNotNone(summary)
+                self.assertEqual(summary["progress_pct"], 100.0)
+                self.assertEqual(summary["disk_done"], 2)
+                self.assertEqual(summary["disk_remaining"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

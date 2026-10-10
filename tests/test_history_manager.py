@@ -14,7 +14,15 @@ from core.history_manager import (
     delete_record,
     clear_history,
     get_history_stats,
-    update_record
+    update_record,
+    create_batch_run,
+    update_batch_run_progress,
+    finish_batch_run,
+    get_last_batch_run,
+    get_batch_runs,
+    get_batch_run_by_id,
+    delete_batch_run,
+    get_folder_progress_summary
 )
 
 
@@ -162,6 +170,120 @@ class TestHistoryManager(unittest.TestCase):
         self.assertEqual(len(rec_after["segments"]), 2)
         self.assertEqual(rec_after["segments"][0]["speaker"], "Alice")
         self.assertEqual(rec_after["segments"][0]["text"], "Bonjour à tous.")
+
+    def test_batch_run_lifecycle(self):
+        """Vérifie le cycle de vie complet d'une session de lot : création, mise à jour, clôture."""
+        init_db(self.db_path)
+        folder = Path(self.temp_dir.name) / "Vidéos_Formation"
+        folder.mkdir()
+
+        # 1. Création du lot
+        batch_id = create_batch_run(
+            folder_path=str(folder),
+            total_files=10,
+            folder_name="Vidéos_Formation",
+            skipped_files=2,
+            db_path=self.db_path
+        )
+        self.assertGreater(batch_id, 0)
+
+        # 2. Vérification de l'état initial
+        last_batch = get_last_batch_run(db_path=self.db_path)
+        self.assertIsNotNone(last_batch)
+        self.assertEqual(last_batch["id"], batch_id)
+        self.assertEqual(last_batch["status"], "in_progress")
+        self.assertEqual(last_batch["total_files"], 10)
+        self.assertEqual(last_batch["skipped_files"], 2)
+        self.assertEqual(last_batch["processed_files"], 0)
+
+        # 3. Progression
+        update_batch_run_progress(
+            batch_id=batch_id,
+            current_file="module_1.mp4",
+            processed_files=3,
+            skipped_files=2,
+            elapsed_seconds=45.0,
+            db_path=self.db_path
+        )
+        updated = get_batch_run_by_id(batch_id, db_path=self.db_path)
+        self.assertEqual(updated["current_file"], "module_1.mp4")
+        self.assertEqual(updated["processed_files"], 3)
+        self.assertEqual(updated["progress_pct"], 50.0) # (3+2)/10 = 50%
+
+        # 4. Clôture avec succès
+        finish_batch_run(
+            batch_id=batch_id,
+            status="completed",
+            processed_files=8,
+            skipped_files=2,
+            elapsed_seconds=120.0,
+            db_path=self.db_path
+        )
+        finished = get_batch_run_by_id(batch_id, db_path=self.db_path)
+        self.assertEqual(finished["status"], "completed")
+        self.assertEqual(finished["progress_pct"], 100.0)
+        self.assertIsNotNone(finished["completed_at"])
+
+        # 5. Historique de tous les lots
+        all_batches = get_batch_runs(db_path=self.db_path)
+        self.assertEqual(len(all_batches), 1)
+
+    def test_get_folder_progress_summary(self):
+        """Vérifie le calcul combiné de progression (session SQLite + scan disque réel)."""
+        init_db(self.db_path)
+        folder = Path(self.temp_dir.name) / "Podcast_Series"
+        folder.mkdir()
+
+        # Créer 4 fichiers médias fictifs sur le disque
+        f1 = folder / "ep1.mp3"
+        f2 = folder / "ep2.mp4"
+        f3 = folder / "ep3.mkv"
+        f4 = folder / "ep4.wav"
+        for f in (f1, f2, f3, f4):
+            f.write_text("dummy media content", encoding="utf-8")
+
+        # 2 fichiers ont déjà leur .txt (transcription terminée)
+        (folder / "ep1.txt").write_text("Transcription ep1", encoding="utf-8")
+        (folder / "ep2.txt").write_text("Transcription ep2", encoding="utf-8")
+
+        # Enregistrer une session de lot
+        batch_id = create_batch_run(
+            folder_path=str(folder),
+            total_files=4,
+            folder_name="Podcast_Series",
+            skipped_files=0,
+            db_path=self.db_path
+        )
+        update_batch_run_progress(
+            batch_id=batch_id,
+            current_file="ep2.mp4",
+            processed_files=2,
+            skipped_files=0,
+            db_path=self.db_path
+        )
+
+        # Calculer le résumé
+        summary = get_folder_progress_summary(db_path=self.db_path)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["folder_name"], "Podcast_Series")
+        self.assertTrue(summary["disk_exists"])
+        self.assertEqual(summary["disk_total"], 4)
+        self.assertEqual(summary["disk_done"], 2)
+        self.assertEqual(summary["disk_remaining"], 2)
+        self.assertEqual(summary["progress_pct"], 50.0)
+
+    def test_clear_history_clears_batches(self):
+        """Vérifie que clear_history vide également la table batch_runs."""
+        init_db(self.db_path)
+        add_record({"filename": "test.mp3"}, db_path=self.db_path)
+        create_batch_run(folder_path="/dummy/path", total_files=5, db_path=self.db_path)
+
+        self.assertEqual(len(get_records(db_path=self.db_path)), 1)
+        self.assertEqual(len(get_batch_runs(db_path=self.db_path)), 1)
+
+        clear_history(db_path=self.db_path)
+        self.assertEqual(len(get_records(db_path=self.db_path)), 0)
+        self.assertEqual(len(get_batch_runs(db_path=self.db_path)), 0)
 
 
 if __name__ == "__main__":
