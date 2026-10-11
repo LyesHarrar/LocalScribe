@@ -10,7 +10,7 @@ import json
 from typing import Dict, Any, Tuple, Optional
 
 __app_name__ = "LocalScribe"
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 __author__ = "Lyes Harrar"
 __github_repo__ = "https://github.com/LyesHarrar/LocalScribe"
 __github_author__ = "https://github.com/LyesHarrar"
@@ -108,7 +108,12 @@ def check_for_updates(
                         "message": f"LocalScribe est à jour (v{current_version})."
                     }
     except urllib.error.HTTPError as e:
-        if e.code == 404:
+        status_code = e.code
+        try:
+            e.close()
+        except Exception:
+            pass
+        if status_code == 404:
             # Aucune release officielle publiée pour l'instant (dépôt neuf ou tags uniquement)
             return {
                 "status": "no_release",
@@ -117,7 +122,7 @@ def check_for_updates(
                 "release_url": __releases_url__,
                 "message": f"Aucune release GitHub publiée pour le moment. Vous utilisez la version v{current_version}."
             }
-        elif e.code == 403:
+        elif status_code == 403:
             return {
                 "status": "error",
                 "current_version": current_version,
@@ -128,7 +133,7 @@ def check_for_updates(
             "status": "error",
             "current_version": current_version,
             "release_url": __releases_url__,
-            "message": f"Erreur HTTP ({e.code}) lors de la vérification."
+            "message": f"Erreur HTTP ({status_code}) lors de la vérification."
         }
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return {

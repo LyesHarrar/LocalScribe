@@ -15,6 +15,7 @@ from core.local_ai_engine import (
     check_ollama,
     check_lmstudio,
     detect_available_backends,
+    clear_backend_cache,
     generate_ai_response,
     ask_ai_about_transcript,
     AI_TEMPLATES
@@ -115,6 +116,26 @@ class TestLocalAIEngine(unittest.TestCase):
             res = detect_available_backends({"api_key": "my-secret-key", "api_provider": "mistral"})
             self.assertEqual(res["active_backend"], "api")
             self.assertEqual(res["active_model"], "mistral-small-latest")
+
+    def test_detect_backends_caching(self):
+        """Vérifie la mise en cache avec use_cache=True et son invalidation."""
+        clear_backend_cache()
+        with patch("core.local_ai_engine.check_ollama", return_value={"available": True, "models": ["llama3.2"]}) as mock_ollama, \
+             patch("core.local_ai_engine.check_lmstudio", return_value={"available": False, "models": []}):
+            # 1er appel avec cache
+            res1 = detect_available_backends({"api_key": ""}, use_cache=True)
+            self.assertEqual(res1["active_backend"], "ollama")
+            self.assertEqual(mock_ollama.call_count, 1)
+
+            # 2e appel avec cache -> doit réutiliser le cache sans réexécuter check_ollama
+            res2 = detect_available_backends({"api_key": ""}, use_cache=True)
+            self.assertEqual(res2["active_backend"], "ollama")
+            self.assertEqual(mock_ollama.call_count, 1)
+
+            # Invalidation explicite
+            clear_backend_cache()
+            detect_available_backends({"api_key": ""}, use_cache=True)
+            self.assertEqual(mock_ollama.call_count, 2)
 
     def test_generate_ai_response_no_backend(self):
         """Vérifie le message d'erreur clair quand aucun moteur n'est actif."""

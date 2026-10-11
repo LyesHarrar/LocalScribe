@@ -55,6 +55,7 @@ def save_ai_config(config: Dict[str, Any]) -> bool:
     path = get_ai_config_path()
     try:
         path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+        clear_backend_cache()
         return True
     except Exception as e:
         logger.error(f"Erreur sauvegarde config IA : {e}")
@@ -107,12 +108,55 @@ def check_lmstudio(base_url: str = "http://localhost:1234/v1", timeout: float = 
     return {"available": False, "provider": "lmstudio", "url": clean_url, "models": []}
 
 
-def detect_available_backends(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+_BACKEND_CACHE: Dict[str, Any] = {
+    "data": None,
+    "timestamp": 0.0,
+    "config_fingerprint": None,
+}
+_CACHE_TTL = 30.0  # 30 secondes de cache en mémoire
+
+
+def clear_backend_cache():
+    """Réinitialise le cache de détection des backends."""
+    global _BACKEND_CACHE
+    _BACKEND_CACHE = {
+        "data": None,
+        "timestamp": 0.0,
+        "config_fingerprint": None,
+    }
+
+
+def detect_available_backends(
+    config: Optional[Dict[str, Any]] = None,
+    use_cache: bool = False,
+    force_refresh: bool = False
+) -> Dict[str, Any]:
     """
     Scanne les moteurs IA disponibles et détermine le meilleur backend actif.
     Ordre de priorité automatique : Ollama -> LM Studio -> API Cloud (si clé renseignée).
+    Si use_cache=True, met en cache le résultat pendant 30s pour fluidifier l'UI Streamlit.
     """
+    global _BACKEND_CACHE
+    now = time.time()
     cfg = config or load_ai_config()
+
+    config_fingerprint = (
+        cfg.get("ollama_url"),
+        cfg.get("lmstudio_url"),
+        cfg.get("api_key"),
+        cfg.get("api_provider"),
+        cfg.get("selected_model")
+    )
+
+    if (
+        use_cache
+        and not force_refresh
+        and _BACKEND_CACHE["data"] is not None
+        and (now - _BACKEND_CACHE["timestamp"]) < _CACHE_TTL
+        and _BACKEND_CACHE["config_fingerprint"] == config_fingerprint
+    ):
+        return _BACKEND_CACHE["data"]
+
     ollama_status = check_ollama(cfg.get("ollama_url", "http://localhost:11434"))
     lmstudio_status = check_lmstudio(cfg.get("lmstudio_url", "http://localhost:1234/v1"))
     
@@ -143,7 +187,7 @@ def detect_available_backends(config: Optional[Dict[str, Any]] = None) -> Dict[s
         all_models = default_cloud_models.get(provider, ["default"])
         active_model = cfg.get("selected_model") if cfg.get("selected_model") in all_models else all_models[0]
 
-    return {
+    result = {
         "active_backend": active_backend,
         "active_model": active_model,
         "ollama": ollama_status,
@@ -151,6 +195,13 @@ def detect_available_backends(config: Optional[Dict[str, Any]] = None) -> Dict[s
         "api_configured": api_available,
         "available_models": all_models
     }
+
+    if use_cache:
+        _BACKEND_CACHE["data"] = result
+        _BACKEND_CACHE["timestamp"] = now
+        _BACKEND_CACHE["config_fingerprint"] = config_fingerprint
+
+    return result
 
 
 # =========================================================================

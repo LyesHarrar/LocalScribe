@@ -592,6 +592,7 @@ def transcribe_batch_threaded(
 
         processed_count = 0
         skipped_count = 0
+        failed_count = 0
         completed_files = []
 
         from core.eta_calculator import ETACalculator, BatchETACalculator
@@ -615,20 +616,23 @@ def transcribe_batch_threaded(
                             status="interrupted",
                             processed_files=processed_count,
                             skipped_files=skipped_count,
+                            failed_files=failed_count,
                             elapsed_seconds=time.time() - batch_start_time
                         )
                     except Exception:
                         pass
-                progress_queue.put({"status": "stopped", "processed": processed_count, "skipped": skipped_count})
+                progress_queue.put({"status": "stopped", "processed": processed_count, "skipped": skipped_count, "failed": failed_count})
                 return
+
+            base_name = file_path.stem
 
             # Détermination du dossier de sortie
             if output_dir:
                 dest_dir = Path(output_dir).resolve()
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                out_txt = dest_dir / f"{file_path.stem}.txt"
-                out_srt = dest_dir / f"{file_path.stem}.srt"
-                out_md = dest_dir / f"{file_path.stem}.md"
+                out_txt = dest_dir / f"{base_name}.txt"
+                out_srt = dest_dir / f"{base_name}.srt"
+                out_md = dest_dir / f"{base_name}.md"
             else:
                 dest_dir = file_path.parent
                 out_txt = file_path.with_suffix(".txt")
@@ -673,128 +677,79 @@ def transcribe_batch_threaded(
 
             audio_to_transcribe = file_path
             pre_meta = {"preprocessed": False}
-            if preprocess_audio and not (stop_event and stop_event.is_set()):
-                try:
-                    from core.audio_preprocessor import preprocess_audio as run_preprocess
-                    progress_queue.put({
-                        "status": "preprocessing",
-                        "file": str(file_path),
-                        "file_name": file_path.name,
-                        "message": f"⚡ Prétraitement audio & normalisation ({file_path.name})..."
-                    })
-                    audio_to_transcribe, pre_meta = run_preprocess(
-                        input_path=file_path,
-                        output_dir=None,  # Écrit dans tempfile.gettempdir() pour ne jamais polluer le dossier de l'utilisateur
-                        normalize_volume=normalize_volume,
-                        denoise=denoise,
-                        status_callback=lambda msg: progress_queue.put({
+            try:
+                if preprocess_audio and not (stop_event and stop_event.is_set()):
+                    try:
+                        from core.audio_preprocessor import preprocess_audio as run_preprocess
+                        progress_queue.put({
                             "status": "preprocessing",
                             "file": str(file_path),
                             "file_name": file_path.name,
-                            "message": msg
+                            "message": f"⚡ Prétraitement audio & normalisation ({file_path.name})..."
                         })
-                    )
-                except Exception as pe:
-                    logger.warning(f"Erreur prétraitement batch {file_path.name} : {pe}")
+                        audio_to_transcribe, pre_meta = run_preprocess(
+                            input_path=file_path,
+                            output_dir=None,  # Écrit dans tempfile.gettempdir() pour ne jamais polluer le dossier de l'utilisateur
+                            normalize_volume=normalize_volume,
+                            denoise=denoise,
+                            status_callback=lambda msg: progress_queue.put({
+                                "status": "preprocessing",
+                                "file": str(file_path),
+                                "file_name": file_path.name,
+                                "message": msg
+                            })
+                        )
+                    except Exception as pe:
+                        logger.warning(f"Erreur prétraitement batch {file_path.name} : {pe}")
 
-            # Inférence Whisper
-            transcribe_kwargs = {
-                "beam_size": beam_size,
-                "task": task,
-                "vad_filter": vad_filter
-            }
-            if language and language != "auto":
-                transcribe_kwargs["language"] = language
-            if initial_prompt and initial_prompt.strip():
-                transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
+                # Inférence Whisper
+                transcribe_kwargs = {
+                    "beam_size": beam_size,
+                    "task": task,
+                    "vad_filter": vad_filter
+                }
+                if language and language != "auto":
+                    transcribe_kwargs["language"] = language
+                if initial_prompt and initial_prompt.strip():
+                    transcribe_kwargs["initial_prompt"] = initial_prompt.strip()
 
-            def _init_batch_transcribe():
-                return model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
+                def _init_batch_transcribe():
+                    return model.transcribe(str(audio_to_transcribe), **transcribe_kwargs)
 
-            try:
-                segments_gen, info = _init_batch_transcribe()
-            except RuntimeError as re:
-                if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")):
-                    logger.warning(f"Erreur CUDA à l'inférence batch ({re}). Bascule automatique sur CPU.")
-                    progress_queue.put({
-                        "status": "warning",
-                        "file": str(file_path),
-                        "warning": "cuBLAS manquant : bascule automatique sur CPU."
-                    })
-                    device = "cpu"
-                    compute_type = "int8"
-                    model = WhisperModel(
-                        model_to_use, 
-                        device=device, 
-                        compute_type=compute_type,
-                        download_root=str(get_models_dir())
-                    )
+                try:
                     segments_gen, info = _init_batch_transcribe()
-                else:
-                    raise
+                except RuntimeError as re:
+                    if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")):
+                        logger.warning(f"Erreur CUDA à l'inférence batch ({re}). Bascule automatique sur CPU.")
+                        progress_queue.put({
+                            "status": "warning",
+                            "file": str(file_path),
+                            "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                        })
+                        device = "cpu"
+                        compute_type = "int8"
+                        model = WhisperModel(
+                            model_to_use, 
+                            device=device, 
+                            compute_type=compute_type,
+                            download_root=str(get_models_dir())
+                        )
+                        segments_gen, info = _init_batch_transcribe()
+                    else:
+                        raise
 
-            duration = getattr(info, "duration", 0.0)
-            detected_lang = getattr(info, "language", language or "auto")
-            raw_prob = getattr(info, "language_probability", 1.0)
-            lang_prob = round(raw_prob * 100, 1) if raw_prob is not None else 100.0
-            segments = []
+                duration = getattr(info, "duration", 0.0)
+                detected_lang = getattr(info, "language", language or "auto")
+                raw_prob = getattr(info, "language_probability", 1.0)
+                lang_prob = round(raw_prob * 100, 1) if raw_prob is not None else 100.0
+                segments = []
 
-            try:
-                for segment in segments_gen:
-                    if stop_event and stop_event.is_set():
-                        progress_queue.put({"status": "stopped", "file": str(file_path)})
-                        return
-
-                    segments.append(segment)
-                    percentage = (segment.end / duration) * 100 if duration > 0 else 0
-                    file_metrics = file_eta_calc.update(segment.end, duration)
-                    batch_metrics = batch_eta_calc.estimate_batch_remaining(
-                        current_idx=idx,
-                        current_file_eta_seconds=file_metrics.get("eta_seconds")
-                    )
-                    progress_queue.put({
-                        "status": "progress",
-                        "file": str(file_path),
-                        "file_name": file_path.name,
-                        "current_idx": idx,
-                        "total_files": total_files,
-                        "percentage": min(100.0, percentage),
-                        "current_time": segment.end,
-                        "duration": duration,
-                        "segment_text": segment.text,
-                        "speed_ratio": file_metrics["speed_ratio"],
-                        "speed_str": file_metrics["speed_str"],
-                        "eta_seconds": file_metrics["eta_seconds"],
-                        "eta_str": file_metrics["eta_str"],
-                        "elapsed_seconds": file_metrics["elapsed_seconds"],
-                        "elapsed_str": file_metrics["elapsed_str"],
-                        "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
-                        "batch_eta_str": batch_metrics["batch_eta_str"],
-                        "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
-                        "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
-                    })
-            except RuntimeError as re:
-                if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")) and len(segments) == 0:
-                    logger.warning(f"Erreur CUDA à l'encodage batch ({re}). Bascule automatique sur CPU.")
-                    progress_queue.put({
-                        "status": "warning",
-                        "file": str(file_path),
-                        "warning": "cuBLAS manquant : bascule automatique sur CPU."
-                    })
-                    device = "cpu"
-                    compute_type = "int8"
-                    model = WhisperModel(
-                        model_to_use, 
-                        device=device, 
-                        compute_type=compute_type,
-                        download_root=str(get_models_dir())
-                    )
-                    segments_gen, info = _init_batch_transcribe()
-                    duration = getattr(info, "duration", 0.0)
+                try:
                     for segment in segments_gen:
                         if stop_event and stop_event.is_set():
                             progress_queue.put({"status": "stopped", "file": str(file_path)})
                             return
+
                         segments.append(segment)
                         percentage = (segment.end / duration) * 100 if duration > 0 else 0
                         file_metrics = file_eta_calc.update(segment.end, duration)
@@ -823,223 +778,306 @@ def transcribe_batch_threaded(
                             "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
                             "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
                         })
-                else:
-                    raise
+                except RuntimeError as re:
+                    if device == "cuda" and any(k in str(re).lower() for k in ("cublas", "cuda", "out of memory")) and len(segments) == 0:
+                        logger.warning(f"Erreur CUDA à l'encodage batch ({re}). Bascule automatique sur CPU.")
+                        progress_queue.put({
+                            "status": "warning",
+                            "file": str(file_path),
+                            "warning": "cuBLAS manquant : bascule automatique sur CPU."
+                        })
+                        device = "cpu"
+                        compute_type = "int8"
+                        model = WhisperModel(
+                            model_to_use, 
+                            device=device, 
+                            compute_type=compute_type,
+                            download_root=str(get_models_dir())
+                        )
+                        segments_gen, info = _init_batch_transcribe()
+                        duration = getattr(info, "duration", 0.0)
+                        for segment in segments_gen:
+                            if stop_event and stop_event.is_set():
+                                progress_queue.put({"status": "stopped", "file": str(file_path)})
+                                return
+                            segments.append(segment)
+                            percentage = (segment.end / duration) * 100 if duration > 0 else 0
+                            file_metrics = file_eta_calc.update(segment.end, duration)
+                            batch_metrics = batch_eta_calc.estimate_batch_remaining(
+                                current_idx=idx,
+                                current_file_eta_seconds=file_metrics.get("eta_seconds")
+                            )
+                            progress_queue.put({
+                                "status": "progress",
+                                "file": str(file_path),
+                                "file_name": file_path.name,
+                                "current_idx": idx,
+                                "total_files": total_files,
+                                "percentage": min(100.0, percentage),
+                                "current_time": segment.end,
+                                "duration": duration,
+                                "segment_text": segment.text,
+                                "speed_ratio": file_metrics["speed_ratio"],
+                                "speed_str": file_metrics["speed_str"],
+                                "eta_seconds": file_metrics["eta_seconds"],
+                                "eta_str": file_metrics["eta_str"],
+                                "elapsed_seconds": file_metrics["elapsed_seconds"],
+                                "elapsed_str": file_metrics["elapsed_str"],
+                                "batch_eta_seconds": batch_metrics["batch_eta_seconds"],
+                                "batch_eta_str": batch_metrics["batch_eta_str"],
+                                "batch_elapsed_seconds": batch_metrics["batch_elapsed_seconds"],
+                                "batch_elapsed_str": batch_metrics["batch_elapsed_str"]
+                            })
+                    else:
+                        raise
 
-            # Diarisation batch optionnelle
-            detected_speakers = []
-            if diar_engine and not (stop_event and stop_event.is_set()):
-                progress_queue.put({
-                    "status": "diarizing",
-                    "file": str(file_path),
-                    "file_name": file_path.name,
-                    "message": f"Diarisation de {file_path.name}..."
-                })
-                try:
-                    diar_segments = diar_engine.diarize(
-                        audio_path=audio_to_transcribe,
-                        num_speakers=num_speakers
-                    )
-                    segments, detected_speakers = assign_speakers_to_whisper_segments(segments, diar_segments)
-                except Exception as d_err:
+                # Diarisation batch optionnelle
+                detected_speakers = []
+                if diar_engine and not (stop_event and stop_event.is_set()):
                     progress_queue.put({
-                        "status": "warning",
+                        "status": "diarizing",
                         "file": str(file_path),
-                        "warning": f"Diarisation échouée sur {file_path.name}: {d_err}"
+                        "file_name": file_path.name,
+                        "message": f"Diarisation de {file_path.name}..."
                     })
+                    try:
+                        diar_segments = diar_engine.diarize(
+                            audio_path=audio_to_transcribe,
+                            num_speakers=num_speakers
+                        )
+                        segments, detected_speakers = assign_speakers_to_whisper_segments(segments, diar_segments)
+                    except Exception as d_err:
+                        progress_queue.put({
+                            "status": "warning",
+                            "file": str(file_path),
+                            "warning": f"Diarisation échouée sur {file_path.name}: {d_err}"
+                        })
 
-            # 4. Écriture atomique dans le dossier de destination
-            tmp_txt = dest_dir / f"{out_txt.name}.tmp"
-            tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
-            if out_txt.exists():
-                out_txt.unlink()
-            tmp_txt.rename(out_txt)
+                # 4. Écriture atomique dans le dossier de destination
+                tmp_txt = dest_dir / f"{out_txt.name}.tmp"
+                tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
+                if out_txt.exists():
+                    out_txt.unlink()
+                tmp_txt.rename(out_txt)
 
-            # Exports optionnels (.srt, .md)
-            if export_srt:
-                tmp_srt = dest_dir / f"{out_srt.name}.tmp"
-                tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
-                if out_srt.exists():
-                    out_srt.unlink()
-                tmp_srt.rename(out_srt)
+                # Exports optionnels (.srt, .md)
+                if export_srt:
+                    tmp_srt = dest_dir / f"{out_srt.name}.tmp"
+                    tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
+                    if out_srt.exists():
+                        out_srt.unlink()
+                    tmp_srt.rename(out_srt)
 
-            if export_md:
-                tmp_md = dest_dir / f"{out_md.name}.tmp"
-                metadata = {
-                    "filename": file_path.name,
-                    "duration": duration,
-                    "language": detected_lang,
-                    "language_probability": f"{lang_prob}%",
-                    "task": task,
-                    "model": model_to_use,
-                    "speakers": detected_speakers if detected_speakers else None
-                }
-                tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")
-                if out_md.exists():
-                    out_md.unlink()
-                tmp_md.rename(out_md)
+                if export_md:
+                    tmp_md = dest_dir / f"{out_md.name}.tmp"
+                    metadata = {
+                        "filename": file_path.name,
+                        "duration": duration,
+                        "language": detected_lang,
+                        "language_probability": f"{lang_prob}%",
+                        "task": task,
+                        "model": model_to_use,
+                        "speakers": detected_speakers if detected_speakers else None
+                    }
+                    tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")
+                    if out_md.exists():
+                        out_md.unlink()
+                    tmp_md.rename(out_md)
 
-            txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else ""
+                txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else ""
 
-            # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8)
-            translated_txt_path = ""
-            translated_srt_path = ""
-            translated_md_path = ""
-            translated_text_content = ""
-            if target_translation and not stop_event.is_set():
-                try:
-                    from core.translation_engine import (
-                        get_translation_engine,
-                        is_translation_model_installed,
-                        ensure_translation_model
-                    )
-                    if not is_translation_model_installed():
-                        ensure_translation_model()
-                    trans_engine = get_translation_engine(device=profile.device if profile else "auto")
-                    trans_segs = trans_engine.translate_segments(
-                        segments,
-                        src_lang=detected_lang,
-                        tgt_lang=target_translation
-                    )
-                    
-                    out_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt"
-                    tmp_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt.tmp"
-                    tmp_txt_tr.write_text(generate_txt(trans_segs), encoding="utf-8")
-                    if out_txt_tr.exists():
-                        out_txt_tr.unlink()
-                    tmp_txt_tr.rename(out_txt_tr)
-                    translated_txt_path = str(out_txt_tr)
-                    translated_text_content = out_txt_tr.read_text(encoding="utf-8") if out_txt_tr.exists() else ""
-                    
-                    if export_srt:
-                        out_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt"
-                        tmp_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt.tmp"
-                        tmp_srt_tr.write_text(generate_srt(trans_segs), encoding="utf-8")
-                        if out_srt_tr.exists():
-                            out_srt_tr.unlink()
-                        tmp_srt_tr.rename(out_srt_tr)
-                        translated_srt_path = str(out_srt_tr)
+                # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8)
+                translated_txt_path = ""
+                translated_srt_path = ""
+                translated_md_path = ""
+                translated_text_content = ""
+                if target_translation and not stop_event.is_set():
+                    try:
+                        from core.translation_engine import (
+                            get_translation_engine,
+                            is_translation_model_installed,
+                            ensure_translation_model
+                        )
+                        if not is_translation_model_installed():
+                            ensure_translation_model()
+                        trans_engine = get_translation_engine(device=profile.device if profile else "auto")
+                        trans_segs = trans_engine.translate_segments(
+                            segments,
+                            src_lang=detected_lang,
+                            tgt_lang=target_translation
+                        )
                         
-                    if export_md:
-                        out_md_tr = dest_dir / f"{base_name}_{target_translation}.md"
-                        tmp_md_tr = dest_dir / f"{base_name}_{target_translation}.md.tmp"
-                        meta_tr = {
-                            "filename": file_path.name,
-                            "duration": duration,
-                            "language": detected_lang,
-                            "language_probability": f"{lang_prob}%",
-                            "task": task,
-                            "model": model_to_use,
-                            "target_translation": target_translation,
-                            "speakers": detected_speakers if detected_speakers else None
-                        }
-                        tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
-                        if out_md_tr.exists():
-                            out_md_tr.unlink()
-                        tmp_md_tr.rename(out_md_tr)
-                        translated_md_path = str(out_md_tr)
-                except Exception as t_err:
-                    logger.warning(f"Erreur lors de la traduction du fichier batch {file_path.name}: {t_err}")
+                        out_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt"
+                        tmp_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt.tmp"
+                        tmp_txt_tr.write_text(generate_txt(trans_segs), encoding="utf-8")
+                        if out_txt_tr.exists():
+                            out_txt_tr.unlink()
+                        tmp_txt_tr.rename(out_txt_tr)
+                        translated_txt_path = str(out_txt_tr)
+                        translated_text_content = out_txt_tr.read_text(encoding="utf-8") if out_txt_tr.exists() else ""
+                        
+                        if export_srt:
+                            out_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt"
+                            tmp_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt.tmp"
+                            tmp_srt_tr.write_text(generate_srt(trans_segs), encoding="utf-8")
+                            if out_srt_tr.exists():
+                                out_srt_tr.unlink()
+                            tmp_srt_tr.rename(out_srt_tr)
+                            translated_srt_path = str(out_srt_tr)
+                            
+                        if export_md:
+                            out_md_tr = dest_dir / f"{base_name}_{target_translation}.md"
+                            tmp_md_tr = dest_dir / f"{base_name}_{target_translation}.md.tmp"
+                            meta_tr = {
+                                "filename": file_path.name,
+                                "duration": duration,
+                                "language": detected_lang,
+                                "language_probability": f"{lang_prob}%",
+                                "task": task,
+                                "model": model_to_use,
+                                "target_translation": target_translation,
+                                "speakers": detected_speakers if detected_speakers else None
+                            }
+                            tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
+                            if out_md_tr.exists():
+                                out_md_tr.unlink()
+                            tmp_md_tr.rename(out_md_tr)
+                            translated_md_path = str(out_md_tr)
+                    except Exception as t_err:
+                        logger.warning(f"Erreur lors de la traduction du fichier batch {file_path.name}: {t_err}")
 
-            serialized_segments = [
-                {
-                    "id": i,
-                    "start": round(getattr(s, "start", 0.0), 3),
-                    "end": round(getattr(s, "end", 0.0), 3),
-                    "text": getattr(s, "text", "").strip(),
-                    "speaker": getattr(s, "speaker", None)
-                }
-                for i, s in enumerate(segments, start=1)
-            ]
+                serialized_segments = [
+                    {
+                        "id": i,
+                        "start": round(getattr(s, "start", 0.0), 3),
+                        "end": round(getattr(s, "end", 0.0), 3),
+                        "text": getattr(s, "text", "").strip(),
+                        "speaker": getattr(s, "speaker", None)
+                    }
+                    for i, s in enumerate(segments, start=1)
+                ]
 
-            # Enregistrement automatique dans l'historique SQLite
-            try:
-                from core.history_manager import add_record
-                add_record({
+                # Enregistrement automatique dans l'historique SQLite
+                try:
+                    from core.history_manager import add_record
+                    add_record({
+                        "filename": file_path.name,
+                        "filepath": str(file_path),
+                        "duration": duration,
+                        "language": detected_lang,
+                        "language_probability": lang_prob,
+                        "task": task,
+                        "model": model_to_use,
+                        "speakers": detected_speakers if detected_speakers else None,
+                        "transcript_text": txt_text_content,
+                        "segments": serialized_segments,
+                        "txt_path": str(out_txt),
+                        "md_path": str(out_md) if export_md else "",
+                        "srt_path": str(out_srt) if export_srt else ""
+                    })
+                except Exception:
+                    pass
+
+                processed_count += 1
+                file_elapsed_total = time.time() - file_start_time
+                batch_eta_calc.record_file_completed(idx, file_elapsed_total)
+
+                if batch_run_id:
+                    try:
+                        from core.history_manager import update_batch_run_progress
+                        update_batch_run_progress(
+                            batch_id=batch_run_id,
+                            current_file=file_path.name,
+                            processed_files=processed_count,
+                            skipped_files=skipped_count,
+                            failed_files=failed_count,
+                            elapsed_seconds=time.time() - batch_start_time
+                        )
+                    except Exception:
+                        pass
+
+                completed_info = {
+                    "file_path": str(file_path),
                     "filename": file_path.name,
-                    "filepath": str(file_path),
                     "duration": duration,
+                    "elapsed_seconds": round(file_elapsed_total, 1),
                     "language": detected_lang,
                     "language_probability": lang_prob,
-                    "task": task,
-                    "model": model_to_use,
-                    "speakers": detected_speakers if detected_speakers else None,
-                    "transcript_text": txt_text_content,
+                    "speakers": detected_speakers,
                     "segments": serialized_segments,
                     "txt_path": str(out_txt),
+                    "srt_path": str(out_srt) if export_srt else "",
                     "md_path": str(out_md) if export_md else "",
-                    "srt_path": str(out_srt) if export_srt else ""
+                    "text": txt_text_content,
+                    "target_translation": target_translation,
+                    "translated_txt_path": translated_txt_path,
+                    "translated_srt_path": translated_srt_path,
+                    "translated_md_path": translated_md_path,
+                    "translated_text": translated_text_content
+                }
+                completed_files.append(completed_info)
+
+                progress_queue.put({
+                    "status": "file_complete",
+                    "file": str(file_path),
+                    "file_name": file_path.name,
+                    "txt_path": str(out_txt),
+                    "srt_path": str(out_srt) if export_srt else "",
+                    "md_path": str(out_md) if export_md else "",
+                    "current_idx": idx,
+                    "total_files": total_files,
+                    "speakers": detected_speakers,
+                    "segments": serialized_segments,
+                    "duration": duration,
+                    "elapsed_seconds": round(file_elapsed_total, 1),
+                    "language": detected_lang,
+                    "language_probability": lang_prob,
+                    "target_translation": target_translation,
+                    "translated_txt_path": translated_txt_path,
+                    "translated_srt_path": translated_srt_path,
+                    "translated_md_path": translated_md_path,
+                    "translated_text": translated_text_content,
+                    "preprocessed": pre_meta.get("preprocessed", False)
                 })
-            except Exception:
-                pass
 
-            processed_count += 1
-            file_elapsed_total = time.time() - file_start_time
-            batch_eta_calc.record_file_completed(idx, file_elapsed_total)
+            except Exception as file_err:
+                failed_count += 1
+                logger.error(f"Erreur lors de la transcription batch du fichier {file_path.name} : {file_err}")
+                for tmp_f in [dest_dir / f"{out_txt.name}.tmp", dest_dir / f"{out_srt.name}.tmp", dest_dir / f"{out_md.name}.tmp"]:
+                    try:
+                        if tmp_f.exists():
+                            tmp_f.unlink()
+                    except Exception:
+                        pass
+                if batch_run_id:
+                    try:
+                        from core.history_manager import update_batch_run_progress
+                        update_batch_run_progress(
+                            batch_id=batch_run_id,
+                            current_file=file_path.name,
+                            processed_files=processed_count,
+                            skipped_files=skipped_count,
+                            failed_files=failed_count,
+                            elapsed_seconds=time.time() - batch_start_time
+                        )
+                    except Exception:
+                        pass
+                progress_queue.put({
+                    "status": "file_error",
+                    "file": str(file_path),
+                    "file_name": file_path.name,
+                    "current_idx": idx,
+                    "total_files": total_files,
+                    "error": str(file_err)
+                })
 
-            if batch_run_id:
-                try:
-                    from core.history_manager import update_batch_run_progress
-                    update_batch_run_progress(
-                        batch_id=batch_run_id,
-                        current_file=file_path.name,
-                        processed_files=processed_count,
-                        skipped_files=skipped_count,
-                        elapsed_seconds=time.time() - batch_start_time
-                    )
-                except Exception:
-                    pass
-
-            completed_info = {
-                "file_path": str(file_path),
-                "filename": file_path.name,
-                "duration": duration,
-                "elapsed_seconds": round(file_elapsed_total, 1),
-                "language": detected_lang,
-                "language_probability": lang_prob,
-                "speakers": detected_speakers,
-                "segments": serialized_segments,
-                "txt_path": str(out_txt),
-                "srt_path": str(out_srt) if export_srt else "",
-                "md_path": str(out_md) if export_md else "",
-                "text": txt_text_content,
-                "target_translation": target_translation,
-                "translated_txt_path": translated_txt_path,
-                "translated_srt_path": translated_srt_path,
-                "translated_md_path": translated_md_path,
-                "translated_text": translated_text_content
-            }
-            completed_files.append(completed_info)
-
-            progress_queue.put({
-                "status": "file_complete",
-                "file": str(file_path),
-                "file_name": file_path.name,
-                "txt_path": str(out_txt),
-                "srt_path": str(out_srt) if export_srt else "",
-                "md_path": str(out_md) if export_md else "",
-                "current_idx": idx,
-                "total_files": total_files,
-                "speakers": detected_speakers,
-                "segments": serialized_segments,
-                "duration": duration,
-                "elapsed_seconds": round(file_elapsed_total, 1),
-                "language": detected_lang,
-                "language_probability": lang_prob,
-                "target_translation": target_translation,
-                "translated_txt_path": translated_txt_path,
-                "translated_srt_path": translated_srt_path,
-                "translated_md_path": translated_md_path,
-                "translated_text": translated_text_content,
-                "preprocessed": pre_meta.get("preprocessed", False)
-            })
-
-            if audio_to_transcribe != file_path:
-                try:
-                    from core.audio_preprocessor import cleanup_preprocessed_file
-                    cleanup_preprocessed_file(audio_to_transcribe, file_path)
-                except Exception:
-                    pass
+            finally:
+                if audio_to_transcribe != file_path:
+                    try:
+                        from core.audio_preprocessor import cleanup_preprocessed_file
+                        cleanup_preprocessed_file(audio_to_transcribe, file_path)
+                    except Exception:
+                        pass
 
         # 5. Fin du traitement par lot
         batch_total_elapsed = time.time() - batch_start_time
@@ -1051,6 +1089,7 @@ def transcribe_batch_threaded(
                     status="completed",
                     processed_files=processed_count,
                     skipped_files=skipped_count,
+                    failed_files=failed_count,
                     elapsed_seconds=batch_total_elapsed
                 )
             except Exception:
@@ -1061,6 +1100,7 @@ def transcribe_batch_threaded(
             "total_files": total_files,
             "processed": processed_count,
             "skipped": skipped_count,
+            "failed": failed_count,
             "files": completed_files,
             "total_elapsed_seconds": round(batch_total_elapsed, 1)
         })
@@ -1074,7 +1114,7 @@ def transcribe_batch_threaded(
                     status="error",
                     processed_files=processed_count if 'processed_count' in locals() else 0,
                     skipped_files=skipped_count if 'skipped_count' in locals() else 0,
-                    failed_files=1,
+                    failed_files=failed_count if 'failed_count' in locals() else 1,
                     elapsed_seconds=time.time() - batch_start_time if 'batch_start_time' in locals() else 0.0
                 )
             except Exception:

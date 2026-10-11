@@ -22,7 +22,8 @@ from core.history_manager import (
     get_batch_runs,
     get_batch_run_by_id,
     delete_batch_run,
-    get_folder_progress_summary
+    get_folder_progress_summary,
+    reset_db_cache
 )
 
 
@@ -284,6 +285,22 @@ class TestHistoryManager(unittest.TestCase):
         clear_history(db_path=self.db_path)
         self.assertEqual(len(get_records(db_path=self.db_path)), 0)
         self.assertEqual(len(get_batch_runs(db_path=self.db_path)), 0)
+
+    def test_init_db_memoization(self):
+        """Vérifie que init_db est mémoïsé et n'exécute pas le DDL à chaque appel."""
+        from unittest.mock import patch
+        reset_db_cache()
+        # Premier appel : initialise la DB
+        init_db(self.db_path)
+
+        # Deuxième appel : mémoïsé, get_db_connection ne doit pas être appelé
+        with patch("core.history_manager.get_db_connection") as mock_conn:
+            init_db(self.db_path)
+            mock_conn.assert_not_called()
+
+            # Appel forcé : doit contourner la mémoïsation
+            init_db(self.db_path, force=True)
+            mock_conn.assert_called_once()
 
 
 if __name__ == "__main__":

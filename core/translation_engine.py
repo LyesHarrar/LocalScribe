@@ -7,6 +7,7 @@ Allemand, Italien, Anglais, etc.) sans aucun appel API, zéro réseau et accél�
 
 import os
 import re
+import tempfile
 import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Callable

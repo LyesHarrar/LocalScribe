@@ -543,10 +543,11 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
 def save_uploaded_file(uploaded_file) -> Path:
-    """Sauvegarde temporaire du fichier uploadé pour traitement local."""
+    """Sauvegarde temporaire sécurisée du fichier uploadé pour traitement local."""
     temp_dir = Path(tempfile.gettempdir()) / "LocalScribe"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    file_path = temp_dir / uploaded_file.name
+    safe_name = Path(uploaded_file.name).name
+    file_path = temp_dir / safe_name
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     return file_path
@@ -1532,6 +1533,7 @@ def main():
                     "total": msg.get("total_files", 0),
                     "processed": msg.get("processed", 0),
                     "skipped": msg.get("skipped", 0),
+                    "failed": msg.get("failed", 0),
                     "files": msg.get("files", []),
                     "total_elapsed_seconds": total_el
                 }
@@ -1548,6 +1550,10 @@ def main():
                         pass
 
                 st.rerun()
+            elif status == "file_error":
+                err_fn = msg.get("file_name", "Fichier")
+                err_msg = msg.get("error", "Erreur inconnue")
+                st.toast(f"Échec sur {err_fn} : {err_msg}", icon="⚠️")
             elif status == "warning":
                 st.toast(msg.get("warning", "Avertissement"), icon="⚠️")
             elif status == "error":

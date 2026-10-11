@@ -10,12 +10,20 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 
 logger = logging.getLogger("LocalScribe.History")
 
 # Cache mémoire pour éviter les rescans disque redondants (TTL 30s)
 _FOLDER_SCAN_CACHE: Dict[str, Dict[str, Any]] = {}
+# Mémoïsation des bases déjà initialisées pour éviter d'exécuter le DDL à chaque requête
+_INITIALIZED_DBS: Set[str] = set()
+
+
+def reset_db_cache() -> None:
+    """Réinitialise le cache des bases SQLite initialisées."""
+    global _INITIALIZED_DBS
+    _INITIALIZED_DBS.clear()
 
 
 def get_default_db_path() -> Path:
@@ -34,8 +42,12 @@ def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: Optional[Path] = None) -> None:
+def init_db(db_path: Optional[Path] = None, force: bool = False) -> None:
     """Initialise le schéma de la base de données s'il n'existe pas déjà."""
+    target_path = str((db_path if db_path is not None else get_default_db_path()).resolve())
+    if not force and target_path in _INITIALIZED_DBS:
+        return
+
     conn = get_db_connection(db_path)
     try:
         with conn:
@@ -88,6 +100,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_runs_started ON batch_runs(started_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_runs_folder ON batch_runs(folder_path)")
+
+        _INITIALIZED_DBS.add(target_path)
     finally:
         conn.close()
 

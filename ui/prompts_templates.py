@@ -127,9 +127,9 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
     st.markdown("### :material/smart_toy: Studio IA & Synthèse sur place")
     st.caption("Analysez, résumez et interrogez vos enregistrements en 1 clic grâce à votre IA locale.")
 
-    # 1. Détection des moteurs IA
+    # 1. Détection des moteurs IA (avec mise en cache pour fluidifier l'UI)
     cfg = load_ai_config()
-    backends = detect_available_backends(cfg)
+    backends = detect_available_backends(cfg, use_cache=True)
     active_b = backends.get("active_backend")
     active_m = backends.get("active_model", "Inconnu")
 
@@ -173,6 +173,8 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
 
     with col_refresh:
         if st.button("🔄 Actualiser", key=f"{key_prefix}_btn_refresh", use_container_width=True, help="Re-scanner les moteurs Ollama et LM Studio"):
+            from core.local_ai_engine import clear_backend_cache
+            clear_backend_cache()
             st.rerun()
 
     with col_cfg:

@@ -417,13 +417,14 @@ def render_editor_tab(
 
         for idx in range(start_idx, end_idx):
             s = segments[idx]
+            seg_id = s.id if hasattr(s, "id") and s.id is not None else idx
             
             with st.container():
                 col_btn, col_spk, col_act1, col_act2 = st.columns([1.6, 2, 1.2, 0.8])
                 with col_btn:
                     # Bouton d'écoute ciblée
                     time_label = f"▶️ {format_timestamp_short(s.start)}"
-                    if st.button(time_label, key=f"{pfx}btn_play_{idx}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", use_container_width=True):
+                    if st.button(time_label, key=f"{pfx}btn_play_{seg_id}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", use_container_width=True):
                         st.session_state[f"{pfx}seek_time"] = s.start
                         st.rerun()
                 
@@ -432,7 +433,7 @@ def render_editor_tab(
                     new_spk = st.text_input(
                         "Locuteur :", 
                         value=s.speaker or "", 
-                        key=f"{pfx}spk_{idx}", 
+                        key=f"{pfx}spk_{seg_id}", 
                         label_visibility="collapsed",
                         placeholder="Locuteur (optionnel)"
                     )
@@ -442,13 +443,13 @@ def render_editor_tab(
                 with col_act1:
                     # Fusionner avec le segment suivant
                     if idx < total_segs - 1:
-                        if st.button("🔗 Fusionner", key=f"{pfx}btn_merge_{idx}", help="Fusionner avec le segment suivant", use_container_width=True):
+                        if st.button("🔗 Fusionner", key=f"{pfx}btn_merge_{seg_id}", help="Fusionner avec le segment suivant", use_container_width=True):
                             _update_segments(merge_adjacent_segments(segments, idx))
                             st.rerun()
                 
                 with col_act2:
                     # Supprimer le segment
-                    if st.button("🗑️", key=f"{pfx}btn_del_{idx}", help="Supprimer ce segment", use_container_width=True):
+                    if st.button("🗑️", key=f"{pfx}btn_del_{seg_id}", help="Supprimer ce segment", use_container_width=True):
                         _update_segments(delete_segment(segments, idx))
                         st.rerun()
 
@@ -456,7 +457,7 @@ def render_editor_tab(
                 new_text = st.text_area(
                     label=f"Texte #{s.id} :",
                     value=s.text,
-                    key=f"{pfx}txt_{idx}",
+                    key=f"{pfx}txt_{seg_id}",
                     height=70,
                     label_visibility="collapsed"
                 )

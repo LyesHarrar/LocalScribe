@@ -21,7 +21,7 @@ class TestVersionModule(unittest.TestCase):
 
     def test_metadata_constants(self):
         """Vérifie la validité des métadonnées du projet."""
-        self.assertEqual(__version__, "2.4.0")
+        self.assertEqual(__version__, "2.4.1")
         self.assertEqual(__author__, "Lyes Harrar")
         self.assertIn("LyesHarrar/LocalScribe", __github_repo__)
         self.assertEqual(__github_author__, "https://github.com/LyesHarrar")

@@ -1152,6 +1152,77 @@ class TestTranscriptionEngine(unittest.TestCase):
                 self.assertEqual(summary["disk_done"], 2)
                 self.assertEqual(summary["disk_remaining"], 0)
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_resilience_on_file_error(self, mock_whisper_class):
+        """Vérifie qu'un fichier corrompu n'arrête pas le reste du lot et nettoie les fichiers temporaires."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+            language_probability = 0.99
+
+        class DummySegment:
+            start = 0.0
+            end = 5.0
+            text = "Transcription réussie du second fichier"
+            speaker = None
+
+        # Le premier fichier lève une exception, le second réussit
+        mock_model.transcribe.side_effect = [
+            RuntimeError("Fichier audio corrompu"),
+            ([DummySegment()], DummyInfo())
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            f1 = tmp_path / "corrupt.mp3"
+            f2 = tmp_path / "valid.mp3"
+            f1.write_bytes(b"bad content")
+            f2.write_bytes(b"good content")
+
+            test_db = tmp_path / "resilience_hist.db"
+
+            with patch("core.history_manager.get_default_db_path", return_value=test_db):
+                q = queue.Queue()
+                stop_event = threading.Event()
+                profile = HardwareProfile("cpu", "int8", "small")
+
+                transcribe_batch_threaded(
+                    files=[f1, f2],
+                    output_dir=tmp_path / "out",
+                    profile=profile,
+                    progress_queue=q,
+                    stop_event=stop_event
+                )
+
+                messages = []
+                while not q.empty():
+                    messages.append(q.get())
+
+                statuses = [m.get("status") for m in messages]
+                self.assertIn("file_error", statuses)
+                self.assertIn("file_complete", statuses)
+                self.assertIn("batch_complete", statuses)
+
+                # Vérification du message batch_complete
+                batch_msg = [m for m in messages if m.get("status") == "batch_complete"][0]
+                self.assertEqual(batch_msg["processed"], 1)
+                self.assertEqual(batch_msg["failed"], 1)
+
+                # Vérification de l'enregistrement dans la base de données
+                from core.history_manager import get_last_batch_run
+                last_run = get_last_batch_run(db_path=test_db)
+                self.assertIsNotNone(last_run)
+                self.assertEqual(last_run["failed_files"], 1)
+                self.assertEqual(last_run["processed_files"], 1)
+
+                # Le fichier valide a généré son .txt
+                self.assertTrue((tmp_path / "out" / "valid.txt").exists())
+                # Aucun résidu .tmp ne subsiste
+                self.assertFalse((tmp_path / "out" / "corrupt.txt.tmp").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
