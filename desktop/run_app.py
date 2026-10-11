@@ -428,15 +428,24 @@ def launch_desktop():
             )
             
             def on_shown():
-                if sys.platform == "win32" and ICON_ICO.exists():
+                if sys.platform == "win32":
                     try:
                         if hasattr(window, "native") and window.native:
                             hwnd_val = getattr(window.native, "Handle", None)
                             if hwnd_val is not None:
                                 hwnd = int(hwnd_val.ToInt64()) if hasattr(hwnd_val, "ToInt64") else int(hwnd_val)
-                                _apply_win32_icon(hwnd, ICON_ICO)
+                                if ICON_ICO.exists():
+                                    _apply_win32_icon(hwnd, ICON_ICO)
+                                # Forcer l'affichage actif et le premier plan (SW_SHOW = 5)
+                                try:
+                                    import ctypes
+                                    user32 = ctypes.windll.user32
+                                    user32.ShowWindow(hwnd, 5)  # SW_SHOW = 5
+                                    user32.SetForegroundWindow(hwnd)
+                                except Exception:
+                                    pass
                     except Exception as e:
-                        logger.debug(f"Erreur application icône fenêtre : {e}")
+                        logger.debug(f"Erreur configuration fenêtre Win32 : {e}")
 
             def on_closed():
                 logger.info("Fermeture de la fenêtre native détectée.")

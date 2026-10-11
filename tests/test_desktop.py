@@ -174,6 +174,27 @@ class TestLauncher(unittest.TestCase):
             show_error_dialog("Titre Test", "Message Test")
             mock_msgbox.assert_called_once()
 
+    @patch("subprocess.Popen")
+    @patch("sys.exit")
+    def test_launcher_main_does_not_hide_gui(self, mock_exit, mock_popen):
+        """Vérifie que launcher.py ne passe pas SW_HIDE qui masquerait la fenêtre native."""
+        from desktop.launcher import main as launcher_main
+        
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = 0
+        mock_popen.return_value = mock_proc
+        
+        with patch("sys.platform", "win32"):
+            launcher_main()
+                        
+        self.assertTrue(mock_popen.called)
+        _, kwargs = mock_popen.call_args
+        # Vérifier qu'aucun startupinfo avec SW_HIDE n'a été transmis
+        startupinfo = kwargs.get("startupinfo")
+        self.assertIsNone(startupinfo, "startupinfo doit être None pour ne pas masquer la GUI")
+        self.assertEqual(kwargs.get("creationflags"), 0x08000000)
+
 
 class TestRunAppPythonResolution(unittest.TestCase):
     """Tests unitaires pour la détection de Python dans run_app."""
