@@ -152,6 +152,61 @@ def _apply_win32_icon(hwnd: int, icon_path: Path) -> None:
         logger.debug(f"Erreur lors de l'application de l'icône Win32 : {e}")
 
 
+def _apply_win32_dark_mode(hwnd: int) -> None:
+    """
+    Applique le thème sombre immersif (DWM) et harmonise la barre de titre
+    et les bordures avec la palette sombre de LocalScribe (noir obsidienne #09090b).
+    Supporte nativement Windows 10 et Windows 11 sans dépendance tierce.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import c_int, byref, sizeof
+
+        dwmapi = getattr(ctypes.windll, "dwmapi", None)
+        if not dwmapi or not hasattr(dwmapi, "DwmSetWindowAttribute"):
+            return
+
+        DwmSetWindowAttribute = dwmapi.DwmSetWindowAttribute
+
+        # 1. Dark Mode immersif Windows (DWMWA_USE_IMMERSIVE_DARK_MODE)
+        # 20 pour Windows 11 et Windows 10 20H1+ (build >= 18985) ; 19 pour builds antérieures (17763 à 18363)
+        val = c_int(1)
+        res = DwmSetWindowAttribute(hwnd, 20, byref(val), sizeof(val))
+        if res != 0:
+            DwmSetWindowAttribute(hwnd, 19, byref(val), sizeof(val))
+
+        # 2. Teinte personnalisée de la barre de titre (Windows 11 build 22000+)
+        # DWMWA_CAPTION_COLOR = 35 (COLORREF format BGR : #09090b -> 0x000B0909)
+        DWMWA_CAPTION_COLOR = 35
+        caption_color = c_int(0x000B0909)
+        DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, byref(caption_color), sizeof(caption_color))
+
+        # 3. Couleur du texte du titre (Windows 11 build 22000+)
+        # DWMWA_TEXT_COLOR = 36 (Blanc argenté #f8fafc -> 0x00FCFAF8)
+        DWMWA_TEXT_COLOR = 36
+        text_color = c_int(0x00FCFAF8)
+        DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, byref(text_color), sizeof(text_color))
+
+        # 4. Couleur de la bordure fine de fenêtre (Windows 11 build 22000+)
+        # DWMWA_BORDER_COLOR = 34 (Zinc-800 #27272a -> 0x002A2727)
+        DWMWA_BORDER_COLOR = 34
+        border_color = c_int(0x002A2727)
+        DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, byref(border_color), sizeof(border_color))
+
+        # 5. Coins arrondis élégants (Windows 11 build 22000+)
+        # DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        DWMWCP_ROUND = 2
+        corner_pref = c_int(DWMWCP_ROUND)
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, byref(corner_pref), sizeof(corner_pref))
+
+        logger.info(f"Thème sombre DWM et bordures appliqués avec succès sur HWND {hwnd}.")
+    except Exception as e:
+        logger.debug(f"Impossible d'appliquer le thème sombre DWM : {e}")
+
+
 def check_webview_dependencies() -> bool:
     """
     Vérifie la présence des dépendances natives (Edge WebView2 sur Windows).
@@ -436,6 +491,7 @@ def launch_desktop():
                                 hwnd = int(hwnd_val.ToInt64()) if hasattr(hwnd_val, "ToInt64") else int(hwnd_val)
                                 if ICON_ICO.exists():
                                     _apply_win32_icon(hwnd, ICON_ICO)
+                                _apply_win32_dark_mode(hwnd)
                                 # Forcer l'affichage actif et le premier plan (SW_SHOW = 5)
                                 try:
                                     import ctypes

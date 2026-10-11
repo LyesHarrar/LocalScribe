@@ -7,8 +7,8 @@
   # 🎙️ LocalScribe
   ### Studio Desktop IA de Transcription, Diarisation & Traduction — 100% Locale, Privée & Zéro-Terminal
 
-  [![Version](https://img.shields.io/badge/Release-v2.4.2-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
-  [![Tests](https://img.shields.io/badge/Tests-149%2F149%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Version](https://img.shields.io/badge/Release-v2.4.3-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Tests](https://img.shields.io/badge/Tests-152%2F152%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero--Cloud-059669.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)
@@ -189,7 +189,7 @@ Le projet a été développé selon les principes stricts définis dans le docum
 ### Option A : Version Portable Autonome (Recommandée — Tout Public)
 *Aucune installation de Python requise.*
 1. Rendez-vous dans la section **[Releases](https://github.com/LyesHarrar/LocalScribe/releases)**.
-2. Téléchargez l'archive `LocalScribe-Portable-v2.4.2.zip`.
+2. Téléchargez l'archive `LocalScribe-Portable-v2.4.3.zip`.
 3. Dézippez le dossier et double-cliquez sur **`LocalScribe.exe`**.
 
 ### Option B : Environnement Développeur

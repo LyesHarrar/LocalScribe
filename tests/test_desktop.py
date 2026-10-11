@@ -16,6 +16,7 @@ from desktop.run_app import (
     cleanup_server,
     get_python_executable,
     _apply_win32_icon,
+    _apply_win32_dark_mode,
     ICON_ICO,
     ICON_PNG,
 )
@@ -121,6 +122,36 @@ class TestDesktop(unittest.TestCase):
             _apply_win32_icon(hwnd=99999, icon_path=fake_path)
         except Exception as e:
             self.fail(f"_apply_win32_icon a levé une exception inattendue : {e}")
+
+    @patch("ctypes.windll.dwmapi.DwmSetWindowAttribute", return_value=0)
+    def test_apply_win32_dark_mode_windows(self, mock_dwm):
+        """Vérifie que _apply_win32_dark_mode configure le Dark Mode immersif, la couleur de titre et les bordures."""
+        with patch("sys.platform", "win32"):
+            _apply_win32_dark_mode(hwnd=123456)
+            # Doit avoir appelé DwmSetWindowAttribute pour :
+            # 1. Dark Mode (20)
+            # 2. Caption color (35)
+            # 3. Text color (36)
+            # 4. Border color (34)
+            # 5. Corner preference (33)
+            self.assertGreaterEqual(mock_dwm.call_count, 5)
+
+    def test_apply_win32_dark_mode_non_windows(self):
+        """Vérifie que _apply_win32_dark_mode retourne sans effet ni erreur sur plateformes non-Windows."""
+        with patch("sys.platform", "linux"):
+            try:
+                _apply_win32_dark_mode(hwnd=123456)
+            except Exception as e:
+                self.fail(f"_apply_win32_dark_mode ne doit pas lever d'exception hors Windows : {e}")
+
+    @patch("ctypes.windll.dwmapi.DwmSetWindowAttribute", side_effect=RuntimeError("DWM Error"))
+    def test_apply_win32_dark_mode_resilient_on_exception(self, mock_dwm):
+        """Vérifie la résilience absolue si dwmapi échoue (ne doit jamais faire crasher l'app)."""
+        with patch("sys.platform", "win32"):
+            try:
+                _apply_win32_dark_mode(hwnd=123456)
+            except Exception as e:
+                self.fail(f"_apply_win32_dark_mode doit être résilient aux erreurs DWM : {e}")
 
 
 class TestLauncher(unittest.TestCase):

@@ -395,6 +395,17 @@ CUSTOM_CSS = """
         min-width: 14px !important;
         margin-left: 2px !important;
     }
+
+    /* 18. Stabilisation visuelle anti-clignotement (Neutralisation du grisage stale de Streamlit) */
+    [data-stale="true"],
+    div[data-stale="true"],
+    .element-container[data-stale="true"],
+    [data-testid="stElementContainer"][data-stale="true"],
+    .stApp[data-test-script-state="running"] [data-stale="true"] {
+        opacity: 1 !important;
+        transition: none !important;
+        filter: none !important;
+    }
 </style>
 """
 
