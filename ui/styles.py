@@ -107,7 +107,8 @@ CUSTOM_CSS = """
     }
     .stButton > button[kind="secondary"]:hover {
         background-color: #27272a !important;
-        border-color: #3f3f46 !important;
+        border-color: rgba(46, 116, 253, 0.45) !important;
+        box-shadow: 0 0 14px rgba(46, 116, 253, 0.15) !important;
         color: #ffffff !important;
     }
 
@@ -227,11 +228,25 @@ CUSTOM_CSS = """
         border-bottom: 2px solid #2e74fd !important;
     }
 
-    /* 15. Masquer UNIQUEMENT le menu burger et le bouton Deploy de Streamlit */
+    /* 15. Masquer le menu burger, le bouton Deploy, la toolbar droite et le témoin Stop/Running */
     #MainMenu { display: none !important; }
     footer { display: none !important; }
     [data-testid="stAppDeployButton"] { display: none !important; }
     [data-testid="stMainMenu"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important; }
+    header [data-testid="stToolbar"] { display: none !important; visibility: hidden !important; }
+    [data-testid="stStatusWidget"] { display: none !important; visibility: hidden !important; }
+    [data-testid="stStatusWidgetRunningIcon"] { display: none !important; visibility: hidden !important; }
+    [data-testid="stStatusWidgetRunningManIcon"] { display: none !important; visibility: hidden !important; }
+    .stStatusWidget { display: none !important; visibility: hidden !important; }
+    div[class*="StatusWidget"] { display: none !important; visibility: hidden !important; }
+
+    /* Masquer le bouton d'agrandissement plein écran du logo (sidebar) et des éléments */
+    [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+    .stElementToolbar { display: none !important; visibility: hidden !important; }
+    section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
+    button[aria-label*="Fullscreen"] { display: none !important; }
+    button[title*="Fullscreen"] { display: none !important; }
 
     /* Rendre le Header transparent mais ACTIF pour les boutons de navigation */
     header[data-testid="stHeader"], header {
@@ -405,6 +420,38 @@ CUSTOM_CSS = """
         opacity: 1 !important;
         transition: none !important;
         filter: none !important;
+    }
+
+    /* 19. Barres de défilement ultra-fines & discrètes (Style Linear / macOS — fini les ascenseurs Windows) */
+    ::-webkit-scrollbar {
+        width: 6px !important;
+        height: 6px !important;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #27272a !important;
+        border-radius: 9999px !important;
+        transition: background 0.2s ease !important;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #3f3f46 !important;
+    }
+    ::-webkit-scrollbar-corner {
+        background: transparent !important;
+    }
+    * {
+        scrollbar-width: thin !important;
+        scrollbar-color: #27272a transparent !important;
+    }
+
+    /* 20. Harmonisation des bordures de cartes et popovers */
+    div[data-testid="stPopover"] > button:hover {
+        background-color: #27272a !important;
+        border-color: #38bdf8 !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 12px rgba(56, 189, 248, 0.18) !important;
     }
 </style>
 """

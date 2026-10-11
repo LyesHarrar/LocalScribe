@@ -190,9 +190,9 @@ def _apply_win32_dark_mode(hwnd: int) -> None:
         DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, byref(text_color), sizeof(text_color))
 
         # 4. Couleur de la bordure fine de fenêtre (Windows 11 build 22000+)
-        # DWMWA_BORDER_COLOR = 34 (Zinc-800 #27272a -> 0x002A2727)
+        # DWMWA_BORDER_COLOR = 34 (Bleu Électrique #2e74fd -> COLORREF BGR : 0x00FD742E)
         DWMWA_BORDER_COLOR = 34
-        border_color = c_int(0x002A2727)
+        border_color = c_int(0x00FD742E)
         DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, byref(border_color), sizeof(border_color))
 
         # 5. Coins arrondis élégants (Windows 11 build 22000+)
@@ -202,7 +202,15 @@ def _apply_win32_dark_mode(hwnd: int) -> None:
         corner_pref = c_int(DWMWCP_ROUND)
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, byref(corner_pref), sizeof(corner_pref))
 
-        logger.info(f"Thème sombre DWM et bordures appliqués avec succès sur HWND {hwnd}.")
+        # 6. Effet Backdrop Mica sur Windows 11 22H2+ (DWMWA_SYSTEMBACKDROP_TYPE = 38, DWMSBT_MAINWINDOW = 2)
+        try:
+            DWMWA_SYSTEMBACKDROP_TYPE = 38
+            backdrop_type = c_int(2)
+            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, byref(backdrop_type), sizeof(backdrop_type))
+        except Exception:
+            pass
+
+        logger.info(f"Thème sombre DWM et bordures néon appliqués avec succès sur HWND {hwnd}.")
     except Exception as e:
         logger.debug(f"Impossible d'appliquer le thème sombre DWM : {e}")
 
@@ -472,7 +480,7 @@ def launch_desktop():
             logger.info(f"Ouverture de la fenêtre native sur {target_url}...")
             
             window = webview.create_window(
-                title="LocalScribe — Studio de Transcription IA Local",
+                title="LocalScribe",
                 url=target_url,
                 width=1320,
                 height=880,
@@ -503,11 +511,22 @@ def launch_desktop():
                     except Exception as e:
                         logger.debug(f"Erreur configuration fenêtre Win32 : {e}")
 
+            def on_loaded():
+                try:
+                    window.load_css(
+                        "[data-testid='stToolbar'], header [data-testid='stToolbar'], "
+                        "[data-testid='stStatusWidget'], .stStatusWidget, "
+                        "[data-testid='stElementToolbar'] { display: none !important; visibility: hidden !important; }"
+                    )
+                except Exception:
+                    pass
+
             def on_closed():
                 logger.info("Fermeture de la fenêtre native détectée.")
                 cleanup_server(process)
                 
             window.events.shown += on_shown
+            window.events.loaded += on_loaded
             window.events.closed += on_closed
             
             gui_backend = "edgechromium" if sys.platform == "win32" else None

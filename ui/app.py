@@ -54,6 +54,7 @@ from core.version import (
 )
 from ui.editor_component import render_editor_tab
 from core.impact_estimator import estimate_impact, ImpactEstimate
+from core.file_cleanup import send_to_recycle_bin, get_folder_media_stats
 
 LOGO_PATH = PROJECT_ROOT / "assets" / "logo.png"
 
@@ -731,11 +732,27 @@ def render_history_view():
         else:
             st.info("Aucune transcription dans l'historique. Effectuez votre première transcription pour la voir apparaître ici !")
         return
-        
-    st.markdown(f"<p style='color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;'>{len(records)} transcription(s) trouvée(s) :</p>", unsafe_allow_html=True)
+
+    PAGE_SIZE = 10
+    total_count = len(records)
+    total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
+
+    if "hist_page_num" not in st.session_state:
+        st.session_state.hist_page_num = 1
+
+    if st.session_state.get("hist_last_search") != search_query:
+        st.session_state.hist_last_search = search_query
+        st.session_state.hist_page_num = 1
+
+    curr_page = max(1, min(st.session_state.hist_page_num, total_pages))
+    start_idx = (curr_page - 1) * PAGE_SIZE
+    end_idx = min(start_idx + PAGE_SIZE, total_count)
+    page_records = records[start_idx:end_idx]
+
+    st.markdown(f"<p style='color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;'>Affichage de {start_idx + 1} à {end_idx} sur {total_count} transcription(s) :</p>", unsafe_allow_html=True)
     
     # 4. Affichage des fiches de transcription
-    for rec in records:
+    for rec in page_records:
         rec_id = rec["id"]
         filename = rec["filename"]
         created = rec["created_at"][:16].replace("T", " à ") if rec.get("created_at") else "Date inconnue"
@@ -838,29 +855,36 @@ def render_history_view():
 
             # Éditeur interactif & Synchronisation pour l'historique
             with st.expander("✏️ Éditer & Synchroniser cette transcription...", expanded=False):
-                h_file_path = Path(rec["filepath"]) if rec.get("filepath") else None
-                h_out_dir = Path(rec["txt_path"]).parent if rec.get("txt_path") else Path(".")
-                h_base_name = Path(filename).stem
-                
-                h_seg_key = f"hist_segs_{rec_id}"
-                if h_seg_key not in st.session_state:
-                    if rec.get("segments"):
-                        st.session_state[h_seg_key] = [
-                            TranscriptionSegment.from_dict(s) for s in rec["segments"]
-                        ]
-                    elif rec.get("srt_path") and Path(rec["srt_path"]).exists():
-                        st.session_state[h_seg_key] = parse_srt(Path(rec["srt_path"]).read_text(encoding="utf-8"))
-                    else:
-                        st.session_state[h_seg_key] = []
-                
-                st.session_state.result_segments = st.session_state[h_seg_key]
-                render_editor_tab(
-                    file_path=h_file_path,
-                    output_dir=h_out_dir,
-                    base_name=h_base_name,
-                    record_id=rec_id,
-                    key_prefix=f"hist_{rec_id}"
-                )
+                ed_loaded_key = f"ed_loaded_{rec_id}"
+                if not st.session_state.get(ed_loaded_key, False):
+                    if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_ed_{rec_id}", type="secondary", use_container_width=True):
+                        st.session_state[ed_loaded_key] = True
+                        st.rerun()
+                    st.caption("Charge le lecteur audio synchronisé et la table d'édition.")
+                else:
+                    h_file_path = Path(rec["filepath"]) if rec.get("filepath") else None
+                    h_out_dir = Path(rec["txt_path"]).parent if rec.get("txt_path") else Path(".")
+                    h_base_name = Path(filename).stem
+                    
+                    h_seg_key = f"hist_segs_{rec_id}"
+                    if h_seg_key not in st.session_state:
+                        if rec.get("segments"):
+                            st.session_state[h_seg_key] = [
+                                TranscriptionSegment.from_dict(s) for s in rec["segments"]
+                            ]
+                        elif rec.get("srt_path") and Path(rec["srt_path"]).exists():
+                            st.session_state[h_seg_key] = parse_srt(Path(rec["srt_path"]).read_text(encoding="utf-8"))
+                        else:
+                            st.session_state[h_seg_key] = []
+                    
+                    st.session_state.result_segments = st.session_state[h_seg_key]
+                    render_editor_tab(
+                        file_path=h_file_path,
+                        output_dir=h_out_dir,
+                        base_name=h_base_name,
+                        record_id=rec_id,
+                        key_prefix=f"hist_{rec_id}"
+                    )
 
             # Traduction à la demande pour l'historique
             with st.expander("🌐 Traduire cet enregistrement...", expanded=False):
@@ -907,12 +931,34 @@ def render_history_view():
 
             # Studio IA & Synthèse pour l'historique
             with st.expander("🤖 Studio IA & Synthèse...", expanded=False):
-                render_llm_templates(transcription_text=txt_content, key_prefix=f"hist_{rec_id}")
+                ai_loaded_key = f"ai_loaded_{rec_id}"
+                if not st.session_state.get(ai_loaded_key, False):
+                    if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_ai_{rec_id}", type="secondary", use_container_width=True):
+                        st.session_state[ai_loaded_key] = True
+                        st.rerun()
+                    st.caption("Détecte et connecte vos modèles locaux Ollama / LM Studio.")
+                else:
+                    render_llm_templates(transcription_text=txt_content, key_prefix=f"hist_{rec_id}")
+
+    # Barre de pagination
+    if total_pages > 1:
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+        col_p1, col_p2, col_p3 = st.columns([1, 2, 1], vertical_alignment="center")
+        with col_p1:
+            if st.button("◀ Précédent", disabled=(curr_page <= 1), use_container_width=True, key="btn_hist_prev_page"):
+                st.session_state.hist_page_num = curr_page - 1
+                st.rerun()
+        with col_p2:
+            st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.88rem;'>Page <strong style='color: #f8fafc;'>{curr_page}</strong> sur <strong style='color: #f8fafc;'>{total_pages}</strong></div>", unsafe_allow_html=True)
+        with col_p3:
+            if st.button("Suivant ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="btn_hist_next_page"):
+                st.session_state.hist_page_num = curr_page + 1
+                st.rerun()
 
 
 def main():
     st.set_page_config(
-        page_title="LocalScribe — Transcription Locale Haute Fidélité",
+        page_title="LocalScribe",
         page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🎙️",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -1036,12 +1082,24 @@ def main():
     DEFAULT_MODE = ":material/upload_file: File d'attente (Multi-Fichiers)"
     if "current_active_mode" not in st.session_state:
         st.session_state.current_active_mode = DEFAULT_MODE
+    if "mode_segmented_control" not in st.session_state:
+        st.session_state.mode_segmented_control = st.session_state.current_active_mode
 
     # Application d'un changement de mode programmé (ex: clic depuis l'historique) avant instanciation du widget
     if "pending_mode_switch" in st.session_state:
         target_mode = st.session_state.pop("pending_mode_switch")
         st.session_state.current_active_mode = target_mode
         st.session_state.mode_segmented_control = target_mode
+
+    def on_mode_change():
+        val = st.session_state.get("mode_segmented_control")
+        if not val:
+            # Empêche la déselection accidentelle si on reclique sur l'onglet actif
+            st.session_state.mode_segmented_control = st.session_state.current_active_mode
+        else:
+            st.session_state.current_active_mode = val
+            if st.session_state.get("transcription_done", False):
+                st.session_state.transcription_done = False
 
     # Sélecteur de Mode Segmenté moderne
     is_busy = st.session_state.get("is_processing", False)
@@ -1052,25 +1110,17 @@ def main():
             ":material/folder: Mode Dossier (Scan Récursif)",
             ":material/history: Historique & Bibliothèque"
         ],
-        default=st.session_state.current_active_mode,
         selection_mode="single",
         label_visibility="collapsed",
         disabled=is_busy,
-        key="mode_segmented_control"
+        key="mode_segmented_control",
+        on_change=on_mode_change
     )
-    if is_busy:
-        st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
-
-    # Protection contre la déselection involontaire (clic sur l'onglet déjà actif)
     if not mode_selection:
         mode_selection = st.session_state.current_active_mode
-        st.session_state.mode_segmented_control = mode_selection
-    elif mode_selection != st.session_state.current_active_mode:
-        st.session_state.current_active_mode = mode_selection
-        # Si une précédente transcription était achevée, quitter la vue de résultat lors du changement d'onglet
-        if st.session_state.get("transcription_done", False):
-            st.session_state.transcription_done = False
-            st.rerun()
+
+    if is_busy:
+        st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
 
     is_folder_mode = "Dossier" in mode_selection
     is_history_mode = "Historique" in mode_selection
@@ -1136,39 +1186,117 @@ def main():
                     st.session_state.get("force_folder_rescan", False)
                 )
                 if needs_rescan:
-                    found_files = [
-                        f for f in current_folder.rglob("*")
-                        if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-                        and not f.name.startswith("ls_opt_")
-                    ]
-                    total_found = len(found_files)
-                    already_done = sum(1 for f in found_files if f.with_suffix(".txt").exists() and f.with_suffix(".txt").stat().st_size > 0)
-                    remaining = total_found - already_done
+                    stats = get_folder_media_stats(current_folder, SUPPORTED_EXTENSIONS)
                     st.session_state.cached_folder_path = folder_str
-                    st.session_state.cached_found_files = found_files
-                    st.session_state.cached_total_found = total_found
-                    st.session_state.cached_already_done = already_done
-                    st.session_state.cached_remaining = remaining
+                    st.session_state.cached_folder_stats = stats
                     st.session_state.force_folder_rescan = False
                 else:
-                    found_files = st.session_state.cached_found_files
-                    total_found = st.session_state.cached_total_found
-                    already_done = st.session_state.cached_already_done
-                    remaining = st.session_state.cached_remaining
+                    stats = st.session_state.cached_folder_stats
+
+                found_files = stats["found_files"]
+                total_found = stats["total_found"]
+                already_done_files = stats["already_done_files"]
+                already_done = stats["already_done_count"]
+                remaining_files = stats["remaining_files"]
+                remaining = stats["remaining_count"]
+                total_size_mb = stats["total_size_mb"]
+                already_done_size_mb = stats["already_done_size_mb"]
+                remaining_size_mb = stats["remaining_size_mb"]
                 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-                col_m1, col_m2, col_m3, col_m_ref = st.columns([2.5, 2.5, 2.5, 1.2], vertical_alignment="center")
+                col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
-                    ui.metric_card(label="Vidéos Détectées", value=str(total_found), description="Dans l'arborescence complète")
+                    size_desc = f"{total_size_mb/1024:.2f} Go" if total_size_mb >= 1024 else f"{total_size_mb:.1f} Mo"
+                    ui.metric_card(label="Vidéos Détectées", value=str(total_found), description=f"Taille totale : {size_desc}")
                 with col_m2:
-                    ui.metric_card(label="Déjà Transcrites", value=str(already_done), description="Ignorées (Smart Resume)")
+                    done_size_desc = f"{already_done_size_mb/1024:.2f} Go" if already_done_size_mb >= 1024 else f"{already_done_size_mb:.1f} Mo"
+                    ui.metric_card(label="Déjà Transcrites", value=str(already_done), description=f"Libérables : {done_size_desc}")
                 with col_m3:
-                    ui.metric_card(label="Restantes à Traiter", value=str(remaining), description="À convertir par Whisper")
-                with col_m_ref:
-                    st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
-                    if st.button("🔄 Actualiser", key="btn_refresh_folder_scan", use_container_width=True, help="Rescanner le dossier en cas d'ajout de nouveaux fichiers"):
+                    rem_size_desc = f"{remaining_size_mb/1024:.2f} Go" if remaining_size_mb >= 1024 else f"{remaining_size_mb:.1f} Mo"
+                    ui.metric_card(label="Restantes à Traiter", value=str(remaining), description=f"En attente : {rem_size_desc}")
+
+                st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
+                col_act1, col_act2, col_act3 = st.columns([1, 1.2, 1.3], vertical_alignment="center")
+                with col_act1:
+                    if st.button("🔄 Actualiser", key="btn_refresh_folder_scan", use_container_width=True, help="Rescanner le dossier en cas d'ajout ou suppression de fichiers"):
                         st.session_state.force_folder_rescan = True
                         st.rerun()
+
+                with col_act2:
+                    if st.button("📂 Ouvrir le dossier", key="btn_open_folder_explorer", use_container_width=True, help="Ouvrir ce dossier dans l'Explorateur Windows"):
+                        open_folder_in_explorer(current_folder)
+
+                with col_act3:
+                    with st.popover("🗑️ Nettoyer les vidéos", use_container_width=True, help="Déplacer en toute sécurité les vidéos vers la Corbeille Windows pour libérer de l'espace"):
+                        st.markdown("#### 🗑️ Déplacer vers la Corbeille")
+                        st.markdown("""
+                        <div style="font-size: 0.85rem; color: #94a3b8; line-height: 1.45; margin-bottom: 0.8rem;">
+                            🛡️ <strong>Sécurisé & Récupérable :</strong> Les vidéos sélectionnées sont envoyées dans la 
+                            <strong>Corbeille Windows</strong> (restaurables à tout moment en cas d'erreur). 
+                            Vos fichiers de transcription (<code>.txt</code>, <code>.srt</code>, <code>.md</code>) sont conservés intacts.
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        if total_found == 0:
+                            st.info("Aucune vidéo détectée à déplacer dans la Corbeille.")
+                        else:
+                            txt_done_lbl = f"{already_done_size_mb/1024:.2f} Go" if already_done_size_mb >= 1024 else f"{already_done_size_mb:.1f} Mo"
+                            txt_all_lbl = f"{total_size_mb/1024:.2f} Go" if total_size_mb >= 1024 else f"{total_size_mb:.1f} Mo"
+                            opt_transcribed = f"✅ Uniquement les vidéos déjà transcrites ({already_done} fichier(s) • {txt_done_lbl})"
+                            opt_all = f"⚠️ TOUTES les vidéos de l'arborescence ({total_found} fichier(s) • {txt_all_lbl})"
+
+                            clean_choice = st.radio(
+                                "Vidéos à envoyer dans la Corbeille :",
+                                options=[opt_transcribed, opt_all],
+                                index=0 if already_done > 0 else 1,
+                                help="Choisissez les vidéos cibles à déplacer dans la Corbeille."
+                            )
+
+                            is_all_clean = "TOUTES" in clean_choice
+                            target_clean = found_files if is_all_clean else already_done_files
+                            clean_count = len(target_clean)
+
+                            if clean_count == 0:
+                                st.warning("Aucune vidéo déjà transcrite trouvée. Toutes les vidéos sont encore en attente de transcription.")
+                            else:
+                                st.markdown("<hr style='margin: 0.6rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+                                chk_confirm_trash = st.checkbox(
+                                    f"Je confirme vouloir envoyer ces {clean_count} vidéo(s) dans la Corbeille Windows",
+                                    value=False,
+                                    key="chk_confirm_recycle_bin"
+                                )
+                                if st.button(
+                                    f"🗑️ Mettre {clean_count} vidéo(s) à la Corbeille",
+                                    type="primary",
+                                    disabled=not chk_confirm_trash,
+                                    use_container_width=True,
+                                    key="btn_run_recycle_bin"
+                                ):
+                                    succ_c, fail_c = send_to_recycle_bin(target_clean)
+                                    st.session_state.force_folder_rescan = True
+                                    if succ_c > 0:
+                                        st.toast(f"🗑️ {succ_c} vidéo(s) envoyée(s) vers la Corbeille Windows !", icon="✅")
+                                    if fail_c > 0:
+                                        st.toast(f"⚠️ {fail_c} fichier(s) n'ont pas pu être déplacés.", icon="⚠️")
+                                    st.rerun()
+
+                if total_found > 0:
+                    st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+                    with st.expander(f"📋 Liste des {total_found} vidéo(s) détectée(s) dans l'arborescence", expanded=(total_found <= 5)):
+                        for idx, f in enumerate(found_files, start=1):
+                            try:
+                                rel_path = f.relative_to(current_folder)
+                            except Exception:
+                                rel_path = f.name
+                            f_mb = f.stat().st_size / (1024 * 1024) if f.exists() else 0.0
+                            is_done = f in already_done_files
+                            badge_color = "#34d399" if is_done else "#facc15"
+                            badge_text = "✅ Transcrite" if is_done else "⏳ En attente"
+                            st.markdown(
+                                f"**{idx}.** `{rel_path}` — *{f_mb:.1f} Mo* "
+                                f"<span style='background: rgba(255,255,255,0.06); color: {badge_color}; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; margin-left: 6px;'>{badge_text}</span>",
+                                unsafe_allow_html=True
+                            )
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
                 st.markdown("##### :material/settings: Options de sortie :")
