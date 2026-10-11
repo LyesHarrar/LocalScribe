@@ -10,7 +10,7 @@ import json
 from typing import Dict, Any, Tuple, Optional
 
 __app_name__ = "LocalScribe"
-__version__ = "2.4.1"
+__version__ = "2.4.2"
 __author__ = "Lyes Harrar"
 __github_repo__ = "https://github.com/LyesHarrar/LocalScribe"
 __github_author__ = "https://github.com/LyesHarrar"

@@ -7,8 +7,8 @@
   # 🎙️ LocalScribe
   ### Studio Desktop IA de Transcription, Diarisation & Traduction — 100% Locale, Privée & Zéro-Terminal
 
-  [![Version](https://img.shields.io/badge/Release-v2.2.1-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
-  [![Tests](https://img.shields.io/badge/Tests-124%2F124%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Version](https://img.shields.io/badge/Release-v2.4.2-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Tests](https://img.shields.io/badge/Tests-149%2F149%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero--Cloud-059669.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)
@@ -103,7 +103,7 @@ flowchart LR
     A[🔍 User Research & Pain Points] --> B[📋 PRD & Architecture Spec]
     B --> C[⚙️ Scaffolding & Moteur Core]
     C --> D[🎨 Progressive Disclosure UI]
-    D --> E[🧪 Validation Empirique 124 Tests]
+    D --> E[🧪 Validation Empirique 149 Tests]
     E --> F[📦 Packaging Zéro Dépendance]
 ```
 
@@ -149,7 +149,7 @@ LocalScribe/
 │   └── package_portable.py  # Pipeline de packaging distribution autonome
 ├── ui/                      # Interface utilisateur réactive
 │   └── app.py               # Vues Streamlit, composants CSS Shadcn & éditeur
-├── tests/                   # Suite de tests unitaires et d'intégration (124 tests)
+├── tests/                   # Suite de tests unitaires et d'intégration (149 tests)
 └── docs/                    # PRD et Spécifications Techniques détaillées
 ```
 
@@ -174,10 +174,10 @@ Le projet a été développé selon les principes stricts définis dans le docum
 1. **La Réalité Prime sur la Théorie (Empirical Verification) :**
    Aucune fonctionnalité n'est considérée comme achevée sans validation par des tests unitaires automatisés.
 2. **Couverture de Tests Maximale :**
-   **124 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
+   **149 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
    ```bash
    python -m unittest discover -s tests -p "test_*.py"
-   # Ran 124 tests in 21.689s — OK
+   # Ran 149 tests — OK
    ```
 3. **Écritures Disque Atomiques :**
    Toute génération de transcription utilise le pattern d'écriture temporaire `.tmp` suivi d'un renommage atomique, garantissant qu'aucun fichier ne soit corrompu en cas de fermeture inopinée.
@@ -189,7 +189,7 @@ Le projet a été développé selon les principes stricts définis dans le docum
 ### Option A : Version Portable Autonome (Recommandée — Tout Public)
 *Aucune installation de Python requise.*
 1. Rendez-vous dans la section **[Releases](https://github.com/LyesHarrar/LocalScribe/releases)**.
-2. Téléchargez l'archive `LocalScribe-Portable-v2.2.1.zip`.
+2. Téléchargez l'archive `LocalScribe-Portable-v2.4.2.zip`.
 3. Dézippez le dossier et double-cliquez sur **`LocalScribe.exe`**.
 
 ### Option B : Environnement Développeur
