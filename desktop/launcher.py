@@ -11,6 +11,16 @@ import subprocess
 import traceback
 from pathlib import Path
 
+# Définition explicite de l'AppUserModelID Windows
+# Associe le processus à LocalScribe dans la barre des tâches au lieu de l'icône générique Python
+if sys.platform == "win32":
+    try:
+        import ctypes
+        app_id = "lyesharrar.localscribe.desktop.app"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception:
+        pass
+
 
 def show_error_dialog(title: str, message: str) -> None:
     """Affiche une boîte de dialogue d'erreur native Windows sans dépendance externe."""

@@ -912,7 +912,7 @@ def render_history_view():
 def main():
     st.set_page_config(
         page_title="LocalScribe — Transcription Locale Haute Fidélité",
-        page_icon="",
+        page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🎙️",
         layout="wide",
         initial_sidebar_state="expanded"
     )

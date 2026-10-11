@@ -52,25 +52,6 @@ C'est un produit de bureau souverain, autonome et packagé "Zéro Terminal", qui
 
 ---
 
-## 📸 Galerie & Aperçu du Produit
-
-<div align="center">
-  <table border="0">
-    <tr>
-      <td width="50%" align="center">
-        <b>Interface Principale & Profils 1-Clic</b><br/><br/>
-        <img src="assets/screenshots/upload_view.png" alt="Interface Upload LocalScribe" width="100%" style="border-radius: 8px;" />
-      </td>
-      <td width="50%" align="center">
-        <b>Mode Dossier Récursif (Smart Batch)</b><br/><br/>
-        <img src="assets/screenshots/batch_folder_view.png" alt="Mode Batch Dossier LocalScribe" width="100%" style="border-radius: 8px;" />
-      </td>
-    </tr>
-  </table>
-</div>
-
----
-
 ## ✨ Fonctionnalités Clés
 
 ### 🧠 Moteur d'Inférence IA Haute Performance

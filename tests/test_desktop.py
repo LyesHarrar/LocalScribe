@@ -15,6 +15,9 @@ from desktop.run_app import (
     wait_for_server,
     cleanup_server,
     get_python_executable,
+    _apply_win32_icon,
+    ICON_ICO,
+    ICON_PNG,
 )
 from desktop.launcher import (
     find_python_executable,
@@ -95,6 +98,29 @@ class TestDesktop(unittest.TestCase):
         with patch("subprocess.run"):
             cleanup_server(mock_proc)
             self.assertTrue(mock_proc.terminate.called)
+
+    def test_icon_assets_exist(self):
+        """Vérifie que les fichiers d'icône officiels .ico et .png sont présents dans assets/."""
+        self.assertTrue(ICON_ICO.exists(), f"Fichier icône manquant : {ICON_ICO}")
+        self.assertTrue(ICON_PNG.exists(), f"Fichier logo PNG manquant : {ICON_PNG}")
+        self.assertGreater(ICON_ICO.stat().st_size, 0)
+
+    @patch("ctypes.windll.user32.LoadImageW", return_value=1234)
+    @patch("ctypes.windll.user32.SendMessageW")
+    def test_apply_win32_icon_success(self, mock_send, mock_load):
+        """Vérifie que _apply_win32_icon charge et applique l'icône au HWND sous Windows."""
+        with patch("sys.platform", "win32"):
+            _apply_win32_icon(hwnd=99999, icon_path=ICON_ICO)
+            self.assertTrue(mock_load.called)
+            self.assertEqual(mock_send.call_count, 2)
+
+    def test_apply_win32_icon_non_existent(self):
+        """Vérifie que _apply_win32_icon ne lève pas d'exception pour un chemin inexistant."""
+        fake_path = Path("assets/inexistant_icon.ico")
+        try:
+            _apply_win32_icon(hwnd=99999, icon_path=fake_path)
+        except Exception as e:
+            self.fail(f"_apply_win32_icon a levé une exception inattendue : {e}")
 
 
 class TestLauncher(unittest.TestCase):

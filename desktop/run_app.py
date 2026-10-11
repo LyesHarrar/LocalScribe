@@ -25,6 +25,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("LocalScribe.Desktop")
 
+# Configuration de l'identité d'application Windows (AppUserModelID)
+# Indispensable pour que Windows affiche l'icône officielle dans la barre des tâches au lieu de l'icône Python.
+if sys.platform == "win32":
+    try:
+        import ctypes
+        app_id = "lyesharrar.localscribe.desktop.app"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception as e:
+        logger.debug(f"Impossible de définir l'AppUserModelID : {e}")
+
 
 def _setup_file_logging():
     try:
@@ -111,6 +121,35 @@ ICON_PNG = PROJECT_ROOT / "assets" / "logo.png"
 
 # Processus serveur global pour nettoyage garanti
 _server_process: Optional[subprocess.Popen] = None
+
+
+def _apply_win32_icon(hwnd: int, icon_path: Path) -> None:
+    """
+    Applique explicitement l'icône .ico au handle natif de fenêtre Windows (WM_SETICON).
+    Garantit l'affichage de l'icône officielle dans la barre de titre, Alt+Tab et la barre des tâches.
+    """
+    if sys.platform != "win32" or not icon_path.exists():
+        return
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x00000010
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        
+        ico_str = str(icon_path.resolve())
+        h_icon_small = user32.LoadImageW(None, ico_str, IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+        h_icon_big = user32.LoadImageW(None, ico_str, IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+        
+        if h_icon_small:
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon_small)
+        if h_icon_big:
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon_big)
+        logger.info(f"Icône officielle Windows appliquée avec succès sur HWND {hwnd}.")
+    except Exception as e:
+        logger.debug(f"Erreur lors de l'application de l'icône Win32 : {e}")
 
 
 def check_webview_dependencies() -> bool:
@@ -388,14 +427,27 @@ def launch_desktop():
                 zoomable=True
             )
             
+            def on_shown():
+                if sys.platform == "win32" and ICON_ICO.exists():
+                    try:
+                        if hasattr(window, "native") and window.native:
+                            hwnd_val = getattr(window.native, "Handle", None)
+                            if hwnd_val is not None:
+                                hwnd = int(hwnd_val.ToInt64()) if hasattr(hwnd_val, "ToInt64") else int(hwnd_val)
+                                _apply_win32_icon(hwnd, ICON_ICO)
+                    except Exception as e:
+                        logger.debug(f"Erreur application icône fenêtre : {e}")
+
             def on_closed():
                 logger.info("Fermeture de la fenêtre native détectée.")
                 cleanup_server(process)
                 
+            window.events.shown += on_shown
             window.events.closed += on_closed
             
             gui_backend = "edgechromium" if sys.platform == "win32" else None
-            webview.start(gui=gui_backend, debug=False)
+            icon_arg = str(ICON_ICO.resolve()) if ICON_ICO.exists() else None
+            webview.start(gui=gui_backend, debug=False, icon=icon_arg)
             return
         except Exception as e:
             logger.warning(
