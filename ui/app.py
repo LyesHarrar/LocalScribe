@@ -1090,16 +1090,25 @@ def main():
         target_mode = st.session_state.pop("pending_mode_switch")
         st.session_state.current_active_mode = target_mode
         st.session_state.mode_segmented_control = target_mode
+        st.session_state.transcription_done = False
+        st.session_state.is_batch = False
+        st.session_state.force_folder_rescan = True
 
     def on_mode_change():
         val = st.session_state.get("mode_segmented_control")
         if not val:
-            # Empêche la déselection accidentelle si on reclique sur l'onglet actif
+            # Re-clic sur l'onglet actif : rétablit la sélection et réinitialise la vue de résultats si nécessaire
             st.session_state.mode_segmented_control = st.session_state.current_active_mode
+            if st.session_state.get("transcription_done", False):
+                st.session_state.transcription_done = False
+                st.session_state.is_batch = False
+                st.session_state.force_folder_rescan = True
         else:
             st.session_state.current_active_mode = val
             if st.session_state.get("transcription_done", False):
                 st.session_state.transcription_done = False
+                st.session_state.is_batch = False
+                st.session_state.force_folder_rescan = True
 
     # Sélecteur de Mode Segmenté moderne
     is_busy = st.session_state.get("is_processing", False)
@@ -1157,7 +1166,7 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             
-            col_path, col_btn = st.columns([5, 1])
+            col_path, col_btn, col_clear = st.columns([4.2, 1.2, 0.9])
             with col_path:
                 target_input = st.text_input(
                     "Chemin d'accès au dossier :",
@@ -1175,6 +1184,16 @@ def main():
                         st.session_state.target_folder = picked
                         st.session_state.force_folder_rescan = True
                         st.rerun()
+            with col_clear:
+                st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
+                if st.button("✕ Effacer", use_container_width=True, help="Effacer le chemin du dossier actuel"):
+                    st.session_state.target_folder = ""
+                    if "cached_folder_path" in st.session_state:
+                        del st.session_state["cached_folder_path"]
+                    if "cached_folder_stats" in st.session_state:
+                        del st.session_state["cached_folder_stats"]
+                    st.session_state.force_folder_rescan = True
+                    st.rerun()
 
             # Analyse dynamique du dossier (avec mise en cache pour éliminer tout lag au clic)
             current_folder = Path(st.session_state.target_folder).resolve() if st.session_state.target_folder else None
@@ -1665,6 +1684,7 @@ def main():
                     "files": msg.get("files", []),
                     "total_elapsed_seconds": total_el
                 }
+                st.session_state.force_folder_rescan = True
 
                 # Notification de lot Windows Toast
                 if st.session_state.get("enable_notifications", True):
@@ -1724,10 +1744,22 @@ def main():
             completed_files = stats.get("files", [])
             is_queue = st.session_state.get("is_queue_batch", False)
             
-            if is_queue:
-                st.success(":material/celebration: File d'attente multi-fichiers traitée avec succès !")
-            else:
-                st.success(":material/celebration: Transcription du dossier terminée avec succès !")
+            col_succ, col_new_task = st.columns([3.8, 2.2], vertical_alignment="center")
+            with col_succ:
+                if is_queue:
+                    st.success(":material/celebration: File d'attente multi-fichiers traitée avec succès !")
+                else:
+                    st.success(":material/celebration: Transcription du dossier terminée avec succès !")
+            with col_new_task:
+                new_btn_lbl = ":material/add_circle: Nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
+                if st.button(new_btn_lbl, key="btn_reset_batch_top", type="primary", use_container_width=True):
+                    st.session_state.transcription_done = False
+                    st.session_state.is_processing = False
+                    st.session_state.latest_text = ""
+                    st.session_state.is_batch = False
+                    st.session_state.is_queue_batch = False
+                    st.session_state.force_folder_rescan = True
+                    st.rerun()
             
             col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
@@ -1912,32 +1944,46 @@ def main():
                                         )
                                 st.text_area(f"Texte traduit ({cf_name}) :", value=tr_text, height=120, key=f"ta_btr_{idx}", disabled=True)
 
-                        # Éditeur interactif pour ce fichier du lot
+                        # Éditeur interactif pour ce fichier du lot (chargement à la demande pour zéro lag)
                         with st.expander(f"✏️ Éditer & Synchroniser ({cf_name})", expanded=False):
-                            b_fpath = Path(cf.get("file_path")) if cf.get("file_path") else None
-                            b_out_dir = Path(cf["txt_path"]).parent if cf.get("txt_path") else Path(".")
-                            b_bname = Path(cf_name).stem
-                            b_seg_key = f"batch_segs_{idx}"
-                            if b_seg_key not in st.session_state:
-                                if cf.get("segments"):
-                                    st.session_state[b_seg_key] = [
-                                        TranscriptionSegment.from_dict(s) for s in cf["segments"]
-                                    ]
-                                elif cf.get("srt_path") and Path(cf["srt_path"]).exists():
-                                    st.session_state[b_seg_key] = parse_srt(Path(cf["srt_path"]).read_text(encoding="utf-8"))
-                                else:
-                                    st.session_state[b_seg_key] = []
-                            st.session_state.result_segments = st.session_state[b_seg_key]
-                            render_editor_tab(
-                                file_path=b_fpath,
-                                output_dir=b_out_dir,
-                                base_name=b_bname,
-                                key_prefix=f"batch_{idx}"
-                            )
+                            b_ed_loaded_key = f"batch_ed_loaded_{idx}"
+                            if not st.session_state.get(b_ed_loaded_key, False):
+                                if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_batch_ed_{idx}", type="secondary", use_container_width=True):
+                                    st.session_state[b_ed_loaded_key] = True
+                                    st.rerun()
+                                st.caption("Charge le lecteur audio synchronisé et la table d'édition.")
+                            else:
+                                b_fpath = Path(cf.get("file_path")) if cf.get("file_path") else None
+                                b_out_dir = Path(cf["txt_path"]).parent if cf.get("txt_path") else Path(".")
+                                b_bname = Path(cf_name).stem
+                                b_seg_key = f"batch_segs_{idx}"
+                                if b_seg_key not in st.session_state:
+                                    if cf.get("segments"):
+                                        st.session_state[b_seg_key] = [
+                                            TranscriptionSegment.from_dict(s) for s in cf["segments"]
+                                        ]
+                                    elif cf.get("srt_path") and Path(cf["srt_path"]).exists():
+                                        st.session_state[b_seg_key] = parse_srt(Path(cf["srt_path"]).read_text(encoding="utf-8"))
+                                    else:
+                                        st.session_state[b_seg_key] = []
+                                st.session_state.result_segments = st.session_state[b_seg_key]
+                                render_editor_tab(
+                                    file_path=b_fpath,
+                                    output_dir=b_out_dir,
+                                    base_name=b_bname,
+                                    key_prefix=f"batch_{idx}"
+                                )
 
-                        # Studio IA & Synthèse pour ce fichier du lot
+                        # Studio IA & Synthèse pour ce fichier du lot (chargement à la demande)
                         with st.expander(f"🤖 Studio IA & Synthèse ({cf_name})", expanded=False):
-                            render_llm_templates(transcription_text=cf_text, key_prefix=f"batch_{idx}")
+                            b_ai_loaded_key = f"batch_ai_loaded_{idx}"
+                            if not st.session_state.get(b_ai_loaded_key, False):
+                                if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_batch_ai_{idx}", type="secondary", use_container_width=True):
+                                    st.session_state[b_ai_loaded_key] = True
+                                    st.rerun()
+                                st.caption("Détecte et connecte vos modèles locaux Ollama / LM Studio.")
+                            else:
+                                render_llm_templates(transcription_text=cf_text, key_prefix=f"batch_{idx}")
 
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
@@ -1950,7 +1996,16 @@ def main():
                 st.session_state.force_folder_rescan = True
                 st.rerun()
         else:
-            st.success(":material/celebration: Transcription terminée avec succès !")
+            col_succ_s, col_new_s = st.columns([3.8, 2.2], vertical_alignment="center")
+            with col_succ_s:
+                st.success(":material/celebration: Transcription terminée avec succès !")
+            with col_new_s:
+                if st.button(":material/sync: Transcrire un autre fichier", key="btn_reset_single_top", type="primary", use_container_width=True):
+                    st.session_state.transcription_done = False
+                    st.session_state.is_processing = False
+                    st.session_state.latest_text = ""
+                    st.session_state.current_file = None
+                    st.rerun()
             file_path = st.session_state.current_file
             out_dir = st.session_state.output_dir
             base_name = file_path.stem

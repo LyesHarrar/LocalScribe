@@ -248,12 +248,18 @@ CUSTOM_CSS = """
     button[aria-label*="Fullscreen"] { display: none !important; }
     button[title*="Fullscreen"] { display: none !important; }
 
-    /* Rendre le Header transparent mais ACTIF pour les boutons de navigation */
+    /* Rendre le Header transparent sans jamais bloquer les clics sur les onglets ou le contenu */
     header[data-testid="stHeader"], header {
         background: transparent !important;
         visibility: visible !important;
         display: flex !important;
         height: 3.5rem !important;
+        pointer-events: none !important;
+    }
+    header[data-testid="stHeader"] button,
+    header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"],
+    header[data-testid="stHeader"] [data-testid="collapsedControl"],
+    header[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"] {
         pointer-events: auto !important;
     }
 
