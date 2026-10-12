@@ -1102,12 +1102,24 @@ def main():
             if st.session_state.get("transcription_done", False):
                 st.session_state.transcription_done = False
                 st.session_state.is_batch = False
+                st.session_state.target_folder = ""
+                st.session_state.pop("cached_folder_path", None)
+                st.session_state.pop("cached_folder_stats", None)
+                st.session_state.pop("cached_batch_zip", None)
+                st.session_state.pop("cached_batch_zip_len", None)
+                st.session_state.batch_stats = {}
                 st.session_state.force_folder_rescan = True
         else:
             st.session_state.current_active_mode = val
             if st.session_state.get("transcription_done", False):
                 st.session_state.transcription_done = False
                 st.session_state.is_batch = False
+                st.session_state.target_folder = ""
+                st.session_state.pop("cached_folder_path", None)
+                st.session_state.pop("cached_folder_stats", None)
+                st.session_state.pop("cached_batch_zip", None)
+                st.session_state.pop("cached_batch_zip_len", None)
+                st.session_state.batch_stats = {}
                 st.session_state.force_folder_rescan = True
 
     # Sélecteur de Mode Segmenté moderne
@@ -1328,7 +1340,20 @@ def main():
                     export_md = st.checkbox(":material/markdown: Markdown (.md)", value=False)
 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-                if total_found > 0:
+                if total_found > 0 and remaining == 0:
+                    st.success("🎉 **Toutes les vidéos de ce dossier ont déjà été transcrites avec succès !**", icon="✅")
+                    col_done1, col_done2 = st.columns([1.6, 1], vertical_alignment="center")
+                    with col_done1:
+                        def on_choose_new_folder():
+                            st.session_state.target_folder = ""
+                            st.session_state.pop("cached_folder_path", None)
+                            st.session_state.pop("cached_folder_stats", None)
+                            st.session_state.force_folder_rescan = True
+                        st.button(":material/sync: Traiter un autre dossier", key="btn_folder_done_choose_another", type="primary", use_container_width=True, on_click=on_choose_new_folder)
+                    with col_done2:
+                        if st.button(":material/folder_open: Ouvrir dans l'Explorateur", key="btn_folder_done_open_dir", use_container_width=True):
+                            open_folder_in_explorer(current_folder)
+                elif total_found > 0:
                     if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
@@ -1395,7 +1420,8 @@ def main():
             uploaded_files = st.file_uploader(
                 "Glissez-déposez vos fichiers ici (sélection multiple supportée) :",
                 type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov", "avi", "webm"],
-                accept_multiple_files=True
+                accept_multiple_files=True,
+                key=f"queue_uploader_{st.session_state.get('uploader_key_version', 0)}"
             )
             
             if uploaded_files:
@@ -1743,6 +1769,22 @@ def main():
             stats = st.session_state.get("batch_stats", {})
             completed_files = stats.get("files", [])
             is_queue = st.session_state.get("is_queue_batch", False)
+
+            def on_reset_batch_action():
+                st.session_state.transcription_done = False
+                st.session_state.is_processing = False
+                st.session_state.latest_text = ""
+                st.session_state.is_batch = False
+                st.session_state.is_queue_batch = False
+                st.session_state.target_folder = ""
+                st.session_state.pop("cached_folder_path", None)
+                st.session_state.pop("cached_folder_stats", None)
+                st.session_state.pop("cached_batch_zip", None)
+                st.session_state.pop("cached_batch_zip_len", None)
+                st.session_state.uploader_key_version = st.session_state.get("uploader_key_version", 0) + 1
+                st.session_state.batch_stats = {}
+                st.session_state.force_folder_rescan = True
+                st.session_state.batch_page_num = 1
             
             col_succ, col_new_task = st.columns([3.8, 2.2], vertical_alignment="center")
             with col_succ:
@@ -1752,14 +1794,7 @@ def main():
                     st.success(":material/celebration: Transcription du dossier terminée avec succès !")
             with col_new_task:
                 new_btn_lbl = ":material/add_circle: Nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
-                if st.button(new_btn_lbl, key="btn_reset_batch_top", type="primary", use_container_width=True):
-                    st.session_state.transcription_done = False
-                    st.session_state.is_processing = False
-                    st.session_state.latest_text = ""
-                    st.session_state.is_batch = False
-                    st.session_state.is_queue_batch = False
-                    st.session_state.force_folder_rescan = True
-                    st.rerun()
+                st.button(new_btn_lbl, key="btn_reset_batch_top", type="primary", use_container_width=True, on_click=on_reset_batch_action)
             
             col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
@@ -1806,7 +1841,10 @@ def main():
                     open_folder_in_explorer(dest_dir)
             
             with col_act2:
-                zip_data = create_batch_zip(completed_files)
+                if "cached_batch_zip" not in st.session_state or st.session_state.get("cached_batch_zip_len") != len(completed_files):
+                    st.session_state.cached_batch_zip = create_batch_zip(completed_files)
+                    st.session_state.cached_batch_zip_len = len(completed_files)
+                zip_data = st.session_state.cached_batch_zip
                 if zip_data:
                     st.download_button(
                         label="📦 Télécharger tout (.zip)",
@@ -1831,12 +1869,42 @@ def main():
                     else:
                         st.warning("Aucun texte à copier.")
 
-            # --- DÉTAIL ET APERÇU FICHIER PAR FICHIER ---
+            # --- DÉTAIL ET APERÇU FICHIER PAR FICHIER (PAGINATION 10/PAGE) ---
             if completed_files:
                 st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-                st.markdown(f"##### 📋 Fichiers transcrits ({len(completed_files)}) :")
+
+                total_b_count = len(completed_files)
+                BATCH_PAGE_SIZE = 10
+                total_b_pages = max(1, (total_b_count + BATCH_PAGE_SIZE - 1) // BATCH_PAGE_SIZE)
                 
-                for idx, cf in enumerate(completed_files, start=1):
+                if "batch_page_num" not in st.session_state:
+                    st.session_state.batch_page_num = 1
+
+                curr_b_page = max(1, min(st.session_state.batch_page_num, total_b_pages))
+                b_start = (curr_b_page - 1) * BATCH_PAGE_SIZE
+                b_end = min(b_start + BATCH_PAGE_SIZE, total_b_count)
+                page_files = completed_files[b_start:b_end]
+
+                def on_batch_prev():
+                    st.session_state.batch_page_num = max(1, curr_b_page - 1)
+
+                def on_batch_next():
+                    st.session_state.batch_page_num = min(total_b_pages, curr_b_page + 1)
+
+                col_bhead, col_bpag = st.columns([2.5, 1.5], vertical_alignment="center")
+                with col_bhead:
+                    st.markdown(f"##### 📋 Fichiers transcrits ({total_b_count}) :")
+                with col_bpag:
+                    if total_b_pages > 1:
+                        col_bp_prev, col_bp_info, col_bp_next = st.columns([1, 1.5, 1], vertical_alignment="center")
+                        with col_bp_prev:
+                            st.button("◀", disabled=(curr_b_page <= 1), use_container_width=True, key="btn_batch_page_prev", on_click=on_batch_prev)
+                        with col_bp_info:
+                            st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.82rem;'>Page <b>{curr_b_page}</b> / {total_b_pages}</div>", unsafe_allow_html=True)
+                        with col_bp_next:
+                            st.button("▶", disabled=(curr_b_page >= total_b_pages), use_container_width=True, key="btn_batch_page_next", on_click=on_batch_next)
+                
+                for idx, cf in enumerate(page_files, start=b_start + 1):
                     cf_name = cf.get("filename", f"Fichier_{idx}")
                     cf_dur = cf.get("duration")
                     cf_dur_str = f"{int(cf_dur // 60)}m {int(cf_dur % 60):02d}s" if cf_dur else ""
@@ -1985,27 +2053,32 @@ def main():
                             else:
                                 render_llm_templates(transcription_text=cf_text, key_prefix=f"batch_{idx}")
 
+                if total_b_pages > 1:
+                    st.markdown("<div style='margin-top: 0.8rem;'></div>", unsafe_allow_html=True)
+                    col_bp_bprev, col_bp_binfo, col_bp_bnext = st.columns([1, 2, 1], vertical_alignment="center")
+                    with col_bp_bprev:
+                        st.button("◀ Page précédente", disabled=(curr_b_page <= 1), use_container_width=True, key="btn_batch_page_prev_bottom", on_click=on_batch_prev)
+                    with col_bp_binfo:
+                        st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>Affichage des fichiers <b>{b_start + 1} à {b_end}</b> sur {total_b_count}</div>", unsafe_allow_html=True)
+                    with col_bp_bnext:
+                        st.button("Page suivante ▶", disabled=(curr_b_page >= total_b_pages), use_container_width=True, key="btn_batch_page_next_bottom", on_click=on_batch_next)
+
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
-            if st.button(reset_label, use_container_width=True, key="btn_reset_batch"):
+            st.button(reset_label, use_container_width=True, key="btn_reset_batch", on_click=on_reset_batch_action)
+        else:
+            def on_reset_single_action():
                 st.session_state.transcription_done = False
                 st.session_state.is_processing = False
                 st.session_state.latest_text = ""
-                st.session_state.is_batch = False
-                st.session_state.is_queue_batch = False
+                st.session_state.current_file = None
                 st.session_state.force_folder_rescan = True
-                st.rerun()
-        else:
+
             col_succ_s, col_new_s = st.columns([3.8, 2.2], vertical_alignment="center")
             with col_succ_s:
                 st.success(":material/celebration: Transcription terminée avec succès !")
             with col_new_s:
-                if st.button(":material/sync: Transcrire un autre fichier", key="btn_reset_single_top", type="primary", use_container_width=True):
-                    st.session_state.transcription_done = False
-                    st.session_state.is_processing = False
-                    st.session_state.latest_text = ""
-                    st.session_state.current_file = None
-                    st.rerun()
+                st.button(":material/sync: Transcrire un autre fichier", key="btn_reset_single_top", type="primary", use_container_width=True, on_click=on_reset_single_action)
             file_path = st.session_state.current_file
             out_dir = st.session_state.output_dir
             base_name = file_path.stem
@@ -2306,12 +2379,7 @@ def main():
                 render_llm_templates(transcription_text=txt_text, key_prefix=f"single_{base_name}")
                 
             st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
-            if st.button(":material/sync: Nouvelle transcription", use_container_width=True):
-                st.session_state.transcription_done = False
-                st.session_state.is_processing = False
-                st.session_state.latest_text = ""
-                st.session_state.force_folder_rescan = True
-                st.rerun()
+            st.button(":material/sync: Nouvelle transcription", use_container_width=True, on_click=on_reset_single_action)
 
 if __name__ == "__main__":
     main()

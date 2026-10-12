@@ -86,6 +86,68 @@ class TestNavigationFlow(unittest.TestCase):
         self.assertTrue(at.session_state["force_folder_rescan"])
         self.assertEqual(at.session_state["current_active_mode"], dossier_mode)
 
+    def test_reset_batch_button_clears_target_folder_and_stats(self):
+        """Vérifie que cliquer sur 'Traiter un autre dossier' réinitialise atomiquement le dossier cible et les stats."""
+        at = AppTest.from_file(APP_PATH, default_timeout=20)
+        at.run()
+
+        dossier_mode = ":material/folder: Mode Dossier (Scan Récursif)"
+        at.session_state["current_active_mode"] = dossier_mode
+        at.session_state["mode_segmented_control"] = dossier_mode
+        at.session_state["target_folder"] = r"C:\MesVideos"
+        at.session_state["transcription_done"] = True
+        at.session_state["is_batch"] = True
+        at.session_state["batch_stats"] = {
+            "total": 5,
+            "processed": 5,
+            "skipped": 0,
+            "failed": 0,
+            "files": [{"file_path": f"vid_{i}.mp4", "filename": f"vid_{i}.mp4", "txt_path": f"vid_{i}.txt", "text": "OK"} for i in range(5)]
+        }
+        at.run()
+
+        reset_btn = None
+        for b in at.button:
+            if b.key == "btn_reset_batch_top":
+                reset_btn = b
+                break
+        self.assertIsNotNone(reset_btn, "Le bouton btn_reset_batch_top doit être présent")
+        reset_btn.click().run()
+
+        self.assertFalse(at.session_state.get("transcription_done"))
+        self.assertFalse(at.session_state.get("is_batch"))
+        self.assertEqual(at.session_state.get("target_folder"), "")
+        self.assertEqual(at.session_state.get("batch_stats"), {})
+
+    def test_batch_results_pagination_next_and_prev(self):
+        """Vérifie la pagination des résultats de lot volumineux (> 10 fichiers)."""
+        at = AppTest.from_file(APP_PATH, default_timeout=20)
+        at.run()
+
+        dossier_mode = ":material/folder: Mode Dossier (Scan Récursif)"
+        at.session_state["current_active_mode"] = dossier_mode
+        at.session_state["mode_segmented_control"] = dossier_mode
+        at.session_state["transcription_done"] = True
+        at.session_state["is_batch"] = True
+        at.session_state["batch_stats"] = {
+            "total": 25,
+            "processed": 25,
+            "skipped": 0,
+            "failed": 0,
+            "files": [{"file_path": f"v_{i}.mp4", "filename": f"v_{i}.mp4", "txt_path": f"v_{i}.txt", "text": "TXT"} for i in range(25)]
+        }
+        at.run()
+
+        self.assertEqual(at.session_state.get("batch_page_num"), 1)
+        next_btn = None
+        for b in at.button:
+            if b.key == "btn_batch_page_next":
+                next_btn = b
+                break
+        self.assertIsNotNone(next_btn)
+        next_btn.click().run()
+        self.assertEqual(at.session_state.get("batch_page_num"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

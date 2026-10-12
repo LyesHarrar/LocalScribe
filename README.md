@@ -8,7 +8,7 @@
   ### Studio Desktop IA de Transcription, Diarisation & Traduction — 100% Locale, Privée & Zéro-Terminal
 
   [![Version](https://img.shields.io/badge/Release-v2.4.5-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
-  [![Tests](https://img.shields.io/badge/Tests-160%2F160%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Tests](https://img.shields.io/badge/Tests-162%2F162%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero--Cloud-059669.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)
@@ -174,10 +174,10 @@ Le projet a été développé selon les principes stricts définis dans le docum
 1. **La Réalité Prime sur la Théorie (Empirical Verification) :**
    Aucune fonctionnalité n'est considérée comme achevée sans validation par des tests unitaires automatisés.
 2. **Couverture de Tests Maximale :**
-   **160 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
+   **162 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
    ```bash
    python -m unittest discover -s tests -p "test_*.py"
-   # Ran 160 tests — OK
+   # Ran 162 tests — OK
    ```
 3. **Écritures Disque Atomiques :**
    Toute génération de transcription utilise le pattern d'écriture temporaire `.tmp` suivi d'un renommage atomique, garantissant qu'aucun fichier ne soit corrompu en cas de fermeture inopinée.
