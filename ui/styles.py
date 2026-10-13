@@ -2,7 +2,7 @@
 Design System de pointe pour LocalScribe.
 Inspiré de Linear, Framer et Shadcn UI :
 - Typographie Inter haute lisibilité
-- Palette assortie au logo (Noir Obsidienne #05070e, Bleu Électrique #2e74fd, Cyan #38bdf8)
+- Palette Ardoise Bleutée Nuit (Fond #0f172a / Slate 900-950, Surfaces #0b1120 / #1e293b, Bleu Électrique #2e74fd, Cyan #38bdf8)
 - Bordures douces, effets de verre (glassmorphism), micro-interactions
 """
 
@@ -39,9 +39,9 @@ CUSTOM_CSS = """
         -moz-osx-font-smoothing: grayscale;
     }
     
-    /* 2. Fond d'écran global — Zinc-950 (Obsidienne) */
+    /* 2. Fond d'écran global — Ardoise Bleutée Nuit (#0f172a) */
     .stApp {
-        background-color: #09090b !important;
+        background-color: #0f172a !important;
         color: #f8fafc !important;
     }
     
@@ -65,13 +65,13 @@ CUSTOM_CSS = """
         color: #e2e8f0 !important;
     }
     
-    /* 4. Barre latérale (Sidebar) - Zinc-950/900 */
+    /* 4. Barre latérale (Sidebar) - Ardoise Bleutée Nuit Profonde (#0b1120) */
     section[data-testid="stSidebar"] {
-        background-color: #09090b !important;
-        border-right: 1px solid #27272a !important;
+        background-color: #0b1120 !important;
+        border-right: 1px solid #1e293b !important;
     }
     section[data-testid="stSidebar"] hr {
-        border-color: #27272a !important;
+        border-color: #1e293b !important;
     }
 
     /* 5. Bouton Principal — Gradient Bleu Électrique Logo */
@@ -161,8 +161,8 @@ CUSTOM_CSS = """
 
     /* 10. Zone de téléversement (File Uploader) */
     [data-testid="stFileUploader"] {
-        background: #09090b !important;
-        border: 1.5px dashed #3f3f46 !important;
+        background: #0b1120 !important;
+        border: 1.5px dashed #1e293b !important;
         border-radius: 14px !important;
         padding: 1.5rem !important;
         transition: all 0.2s ease !important;

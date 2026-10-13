@@ -1876,7 +1876,7 @@ def main():
             st.markdown("##### Flux retranscrit en direct :")
             preview = st.session_state.latest_text[-400:]
             st.markdown(f"""
-            <div style="background: #09090b; border: 1px solid #27272a; border-radius: 8px; padding: 1rem; font-family: 'Consolas', 'Courier New', monospace; color: #10b981; font-size: 0.85rem; line-height: 1.5; min-height: 120px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);">
+            <div style="background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 1rem; font-family: 'Consolas', 'Courier New', monospace; color: #10b981; font-size: 0.85rem; line-height: 1.5; min-height: 120px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);">
                 <span style="color: #64748b;">$ whisper --model {st.session_state.get('selected_model', 'medium')}</span><br><br>
                 ... {preview}<span style="animation: blink 1s step-end infinite;">_</span>
             </div>

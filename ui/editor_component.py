@@ -98,7 +98,7 @@ def render_karaoke_html_player(
     <meta charset="utf-8">
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }}
-        body {{ background: #09090b; color: #f8fafc; padding: 8px; }}
+        body {{ background: #0f172a; color: #f8fafc; padding: 8px; }}
         .player-bar {{
             position: sticky;
             top: 0;
