@@ -150,6 +150,31 @@ Deuxième ligne de texte.
         self.assertEqual(parse_srt(""), [])
         self.assertEqual(parse_srt("   \n\n  "), [])
 
+    def test_generate_txt_with_timestamps(self):
+        txt = generate_txt(self.segments, include_speakers=True, include_timestamps=True)
+        self.assertEqual(
+            txt,
+            "[00:00:00 -> 00:00:05] Bonjour et bienvenue.\n[00:00:05 -> 00:00:12] Voici un test de sous-titres."
+        )
+
+    def test_generate_txt_with_speakers_and_timestamps(self):
+        txt = generate_txt(self.diarized_segments, include_speakers=True, include_timestamps=True)
+        self.assertEqual(
+            txt,
+            "[00:00:00 -> 00:00:04] [Locuteur 1] Bonjour tout le monde.\n[00:00:04 -> 00:00:08] [Locuteur 2] Bonjour, merci d'être là."
+        )
+
+    def test_generate_markdown_with_timestamps(self):
+        meta = {
+            "filename": "solo.mp3",
+            "duration": 12.125,
+            "language": "fr",
+            "model": "small"
+        }
+        md = generate_markdown(self.segments, meta, include_speakers=False, include_timestamps=True)
+        self.assertIn("- `[00:00:00 -> 00:00:05]` Bonjour et bienvenue.", md)
+        self.assertIn("- `[00:00:05 -> 00:00:12]` Voici un test de sous-titres.", md)
+
 
 if __name__ == "__main__":
     unittest.main()

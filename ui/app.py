@@ -42,7 +42,12 @@ from core.transcription_engine import (
     SUPPORTED_EXTENSIONS,
     SUPPORTED_LANGUAGES
 )
-from core.text_formatter import TranscriptionSegment, parse_srt
+from core.text_formatter import (
+    TranscriptionSegment, 
+    parse_srt, 
+    generate_txt, 
+    generate_markdown
+)
 from core.audio_preprocessor import is_ffmpeg_available
 from core.eta_calculator import format_friendly_duration
 from core.notifications import notify_transcription_complete, notify_batch_complete
@@ -53,6 +58,8 @@ from core.version import (
     check_for_updates,
 )
 from ui.editor_component import render_editor_tab
+from ui.visual_component import render_visual_tab
+from core.visual_extractor import is_video_file, VisualKeyframe
 from core.impact_estimator import estimate_impact, ImpactEstimate
 from core.file_cleanup import send_to_recycle_bin, get_folder_media_stats
 
@@ -106,13 +113,15 @@ def select_folder_dialog() -> str:
     except Exception:
         return ""
 
-def render_metric_card(label: str, value: str, subtext: str = ""):
-    """Rendu d'une carte métrique au style Framer / Linear."""
+def render_metric_card(label: str, value: str, subtext: str = "", description: str = ""):
+    """Rendu d'une carte métrique ultra-rapide au style Framer / Linear (0ms, aucun iframe)."""
+    desc = description or subtext or ""
+    sub_html = f"<div style='color: #71717a; font-size: 0.76rem; margin-top: 0.2rem;'>{desc}</div>" if desc else ""
     st.markdown(f"""
-    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
-        <div style="color: #a1a1aa; font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem;">{label}</div>
+    <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 0.95rem 1.15rem; box-shadow: 0 4px 14px rgba(0,0,0,0.3); min-height: 82px;">
+        <div style="color: #a1a1aa; font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">{label}</div>
         <div style="color: #f8fafc; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em;">{value}</div>
-        <div style="color: #71717a; font-size: 0.76rem; margin-top: 0.2rem;">{subtext}</div>
+        {sub_html}
     </div>
     """, unsafe_allow_html=True)
 
@@ -480,6 +489,23 @@ def render_sidebar():
             st.session_state.denoise_audio = denoise_audio
             st.session_state.preprocess_audio = normalize_vol or denoise_audio
 
+            # Formatage & Enrichissement Visuel
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            st.markdown("##### ⏱️ Horodatages & Visuels")
+            include_ts = st.checkbox(
+                "⏱️ Inclure les horodatages dans les textes (.txt / .md)",
+                value=st.session_state.get("include_timestamps", False),
+                help="Ajoute le préfixe [HH:MM:SS -> HH:MM:SS] devant chaque segment dans les fichiers .txt et .md."
+            )
+            st.session_state.include_timestamps = include_ts
+
+            extract_vis = st.checkbox(
+                "🖼️ Détecter les schémas/visuels clés (Vidéos)",
+                value=st.session_state.get("extract_visuals", True),
+                help="Repère automatiquement les moments où un schéma, slide ou tableau est mentionné et extrait les captures HD."
+            )
+            st.session_state.extract_visuals = extract_vis
+
             # Notifications & Alertes Bureau
             st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             st.markdown("##### 🔔 Notifications & Alertes")
@@ -496,6 +522,47 @@ def render_sidebar():
                 help="Émet un carillon système Windows discret à la fin de la transcription."
             )
             st.session_state.enable_chime = enable_chime
+
+            # IA Locale & Synthèse (Ollama / Qwen / LM Studio)
+            st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+            st.markdown("##### 🤖 IA Locale & Synthèse (Ollama / Qwen)")
+            try:
+                from core.local_ai_engine import detect_available_backends
+                ai_backends = detect_available_backends(use_cache=True)
+                ollama_ok = ai_backends.get("ollama", {}).get("available", False)
+                lm_ok = ai_backends.get("lmstudio", {}).get("available", False)
+                active_mod = ai_backends.get("active_model")
+                
+                if ollama_ok:
+                    mod_disp = f" • {active_mod}" if active_mod else ""
+                    st.markdown(
+                        render_badge(f"🟢 Ollama connecté{mod_disp}", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
+                        unsafe_allow_html=True
+                    )
+                elif lm_ok:
+                    mod_disp = f" • {active_mod}" if active_mod else ""
+                    st.markdown(
+                        render_badge(f"🟢 LM Studio connecté{mod_disp}", color="#34d399", bg="rgba(52, 211, 153, 0.1)"),
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        render_badge("⚪ IA locale en attente", color="#94a3b8", bg="rgba(148, 163, 184, 0.1)"),
+                        unsafe_allow_html=True
+                    )
+                    st.caption("Lancez l'application Ollama ou `ollama serve` sous Windows pour activer Qwen.")
+                
+                from ui.prompts_templates import _render_ai_config_popover
+                _render_ai_config_popover(ai_backends, key_prefix="sb")
+                
+                st.markdown(
+                    "<div style='font-size: 0.78rem; color: #94a3b8; line-height: 1.4; margin-top: 0.35rem;'>"
+                    "Le <b>Studio IA</b> s'active automatiquement dès qu'un fichier est transcrit (onglet <b>🤖 Studio IA</b>) ou depuis la <b>Bibliothèque</b>."
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            except Exception as aie:
+                logger.warning(f"Erreur widget IA sidebar : {aie}")
 
         # -------------------------------------------------------------
         # 5. Widget d'avancement épinglé en cours de traitement
@@ -556,7 +623,6 @@ def save_uploaded_file(uploaded_file) -> Path:
 
 def render_history_view():
     """Affiche la bibliothèque et l'historique complet des transcriptions."""
-    import streamlit_shadcn_ui as ui
     from core.history_manager import (
         get_records,
         get_history_stats,
@@ -573,19 +639,19 @@ def render_history_view():
     stats = get_history_stats()
     col_s1, col_s2, col_s3 = st.columns(3)
     with col_s1:
-        ui.metric_card(
+        render_metric_card(
             label="Total Enregistré", 
             value=f"{stats['total_count']} fichiers", 
             description="Transcriptions mémorisées"
         )
     with col_s2:
-        ui.metric_card(
+        render_metric_card(
             label="Volume Audio", 
             value=f"{stats['total_duration_hours']:.1f} h", 
             description=f"Soit ~{stats['total_duration_minutes']:.0f} minutes traitées"
         )
     with col_s3:
-        ui.metric_card(
+        render_metric_card(
             label="Langues Rencontrées", 
             value=str(stats['distinct_languages']), 
             description="Langues sources distinctes"
@@ -638,17 +704,17 @@ def render_history_view():
 
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
         with col_f1:
-            ui.metric_card(label="Avancement Global", value=f"{f_pct:.1f} %", description=f"{f_done} / {f_total} fichier(s)")
+            render_metric_card(label="Avancement Global", value=f"{f_pct:.1f} %", description=f"{f_done} / {f_total} fichier(s)")
         with col_f2:
-            ui.metric_card(label="Déjà Transcrits", value=str(f_done), description="Fichiers prêts (.txt)")
+            render_metric_card(label="Déjà Transcrits", value=str(f_done), description="Fichiers prêts (.txt)")
         with col_f3:
-            ui.metric_card(label="Restants à Traiter", value=str(f_remaining), description="Vidéos / audios à convertir")
+            render_metric_card(label="Restants à Traiter", value=str(f_remaining), description="Vidéos / audios à convertir")
         with col_f4:
             el_sec = folder_summary.get("elapsed_seconds", 0.0)
             m, s = divmod(int(el_sec), 60)
             h, m = divmod(m, 60)
             t_lbl = f"{h}h {m:02d}m" if h > 0 else f"{m:02d}m {s:02d}s" if m > 0 else f"{s}s"
-            ui.metric_card(label="Temps Écoulé", value=t_lbl if el_sec > 0 else "—", description="Dernière session")
+            render_metric_card(label="Temps Écoulé", value=t_lbl if el_sec > 0 else "—", description="Dernière session")
 
         st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
         col_act1, col_act2, col_act3 = st.columns([2.2, 1.8, 1.5])
@@ -1077,8 +1143,6 @@ def main():
     if "batch_elapsed_str" not in st.session_state:
         st.session_state.batch_elapsed_str = "00:00"
 
-    import streamlit_shadcn_ui as ui
-
     DEFAULT_MODE = ":material/upload_file: File d'attente (Multi-Fichiers)"
     if "current_active_mode" not in st.session_state:
         st.session_state.current_active_mode = DEFAULT_MODE
@@ -1096,31 +1160,21 @@ def main():
 
     def on_mode_change():
         val = st.session_state.get("mode_segmented_control")
-        if not val:
-            # Re-clic sur l'onglet actif : rétablit la sélection et réinitialise la vue de résultats si nécessaire
-            st.session_state.mode_segmented_control = st.session_state.current_active_mode
-            if st.session_state.get("transcription_done", False):
-                st.session_state.transcription_done = False
-                st.session_state.is_batch = False
-                st.session_state.target_folder = ""
-                st.session_state.pop("cached_folder_path", None)
-                st.session_state.pop("cached_folder_stats", None)
-                st.session_state.pop("cached_batch_zip", None)
-                st.session_state.pop("cached_batch_zip_len", None)
-                st.session_state.batch_stats = {}
-                st.session_state.force_folder_rescan = True
-        else:
+        if val:
             st.session_state.current_active_mode = val
-            if st.session_state.get("transcription_done", False):
-                st.session_state.transcription_done = False
-                st.session_state.is_batch = False
-                st.session_state.target_folder = ""
-                st.session_state.pop("cached_folder_path", None)
-                st.session_state.pop("cached_folder_stats", None)
-                st.session_state.pop("cached_batch_zip", None)
-                st.session_state.pop("cached_batch_zip_len", None)
-                st.session_state.batch_stats = {}
-                st.session_state.force_folder_rescan = True
+        else:
+            st.session_state.mode_segmented_control = st.session_state.current_active_mode
+
+        if st.session_state.get("transcription_done", False):
+            st.session_state.transcription_done = False
+            st.session_state.is_batch = False
+            st.session_state.target_folder = ""
+            st.session_state.pop("cached_folder_path", None)
+            st.session_state.pop("cached_folder_stats", None)
+            st.session_state.pop("cached_batch_zip", None)
+            st.session_state.pop("cached_batch_zip_len", None)
+            st.session_state.batch_stats = {}
+            st.session_state.force_folder_rescan = True
 
     # Sélecteur de Mode Segmenté moderne
     is_busy = st.session_state.get("is_processing", False)
@@ -1134,11 +1188,13 @@ def main():
         selection_mode="single",
         label_visibility="collapsed",
         disabled=is_busy,
+        required=True,
         key="mode_segmented_control",
         on_change=on_mode_change
     )
     if not mode_selection:
-        mode_selection = st.session_state.current_active_mode
+        mode_selection = st.session_state.get("current_active_mode", DEFAULT_MODE)
+        st.session_state.mode_segmented_control = mode_selection
 
     if is_busy:
         st.info("🔒 **Transcription en cours :** Les onglets de mode sont temporairement verrouillés pour protéger la tâche active. Utilisez le bouton **🛑 Interrompre** pour arrêter à tout moment.", icon="⏳")
@@ -1238,13 +1294,13 @@ def main():
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
                     size_desc = f"{total_size_mb/1024:.2f} Go" if total_size_mb >= 1024 else f"{total_size_mb:.1f} Mo"
-                    ui.metric_card(label="Vidéos Détectées", value=str(total_found), description=f"Taille totale : {size_desc}")
+                    render_metric_card(label="Vidéos Détectées", value=str(total_found), description=f"Taille totale : {size_desc}")
                 with col_m2:
                     done_size_desc = f"{already_done_size_mb/1024:.2f} Go" if already_done_size_mb >= 1024 else f"{already_done_size_mb:.1f} Mo"
-                    ui.metric_card(label="Déjà Transcrites", value=str(already_done), description=f"Libérables : {done_size_desc}")
+                    render_metric_card(label="Déjà Transcrites", value=str(already_done), description=f"Libérables : {done_size_desc}")
                 with col_m3:
                     rem_size_desc = f"{remaining_size_mb/1024:.2f} Go" if remaining_size_mb >= 1024 else f"{remaining_size_mb:.1f} Mo"
-                    ui.metric_card(label="Restantes à Traiter", value=str(remaining), description=f"En attente : {rem_size_desc}")
+                    render_metric_card(label="Restantes à Traiter", value=str(remaining), description=f"En attente : {rem_size_desc}")
 
                 st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
                 col_act1, col_act2, col_act3 = st.columns([1, 1.2, 1.3], vertical_alignment="center")
@@ -1331,13 +1387,20 @@ def main():
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
                 st.markdown("##### :material/settings: Options de sortie :")
-                col_opt1, col_opt2, col_opt3 = st.columns(3)
+                col_opt1, col_opt2, col_opt3, col_opt4 = st.columns([1, 1, 1, 1.4])
                 with col_opt1:
-                    st.checkbox(":material/description: Texte brut (.txt)", value=True, disabled=True)
+                    folder_export_txt = st.checkbox(":material/description: Texte brut (.txt)", value=True, key="chk_folder_txt")
                 with col_opt2:
-                    export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=False)
+                    export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=False, key="chk_folder_srt")
                 with col_opt3:
-                    export_md = st.checkbox(":material/markdown: Markdown (.md)", value=False)
+                    export_md = st.checkbox(":material/markdown: Markdown (.md)", value=False, key="chk_folder_md")
+                with col_opt4:
+                    folder_export_vis = st.checkbox("📸 Extraire schémas (Vidéo)", value=st.session_state.get("extract_visuals", True), key="chk_folder_visuals", help="Capture automatiquement les slides et schémas montrés à l'écran.")
+                    st.session_state.extract_visuals = folder_export_vis
+
+                has_any_folder_export = folder_export_txt or export_srt or export_md
+                if not has_any_folder_export:
+                    st.warning("⚠️ Veuillez cocher au moins un format d'export (.txt, .srt ou .md).")
 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 if total_found > 0 and remaining == 0:
@@ -1354,7 +1417,7 @@ def main():
                         if st.button(":material/folder_open: Ouvrir dans l'Explorateur", key="btn_folder_done_open_dir", use_container_width=True):
                             open_folder_in_explorer(current_folder)
                 elif total_found > 0:
-                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
+                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=(st.session_state.is_processing or not has_any_folder_export), use_container_width=True):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -1381,8 +1444,11 @@ def main():
                                 "progress_queue": st.session_state.progress_queue,
                                 "stop_event": st.session_state.stop_event,
                                 "model_size": st.session_state.selected_model,
+                                "export_txt": folder_export_txt,
                                 "export_srt": export_srt,
                                 "export_md": export_md,
+                                "extract_visuals": folder_export_vis,
+                                "include_timestamps": st.session_state.get("include_timestamps", False),
                                 "language": st.session_state.get("selected_language"),
                                 "task": st.session_state.get("selected_task", "transcribe"),
                                 "initial_prompt": st.session_state.get("initial_prompt"),
@@ -1428,19 +1494,19 @@ def main():
                 total_mb = sum(f.size for f in uploaded_files) / (1024 * 1024)
                 col_info1, col_info2, col_info3 = st.columns(3)
                 with col_info1:
-                    ui.metric_card(
+                    render_metric_card(
                         label="Fichiers en File", 
                         value=f"{len(uploaded_files)} fichier(s)", 
                         description="Prêts pour traitement"
                     )
                 with col_info2:
-                    ui.metric_card(
+                    render_metric_card(
                         label="Taille Cumulée", 
                         value=f"{total_mb:.1f} MB", 
                         description="Poids total des médias"
                     )
                 with col_info3:
-                    ui.metric_card(
+                    render_metric_card(
                         label="Modèle Whisper", 
                         value=st.session_state.selected_model, 
                         description="faster-whisper local"
@@ -1453,14 +1519,37 @@ def main():
                         st.markdown(f"**{idx}.** `{f.name}` — *{f_mb:.2f} MB*")
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
-                st.markdown("##### :material/settings: Options de sortie pour la file :")
-                col_o1, col_o2, col_o3 = st.columns(3)
-                with col_o1:
-                    st.checkbox(":material/description: Texte brut (.txt)", value=True, disabled=True, key="chk_q_txt")
-                with col_o2:
-                    queue_export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=True, key="chk_q_srt")
-                with col_o3:
-                    queue_export_md = st.checkbox(":material/markdown: Markdown (.md)", value=True, key="chk_q_md")
+                st.markdown("##### :material/settings: Options d'export & traitement :")
+                has_any_video = any(is_video_file(f.name) for f in uploaded_files)
+                if has_any_video:
+                    col_o1, col_o2, col_o3, col_o4 = st.columns([1, 1, 1, 1.4])
+                    with col_o1:
+                        queue_export_txt = st.checkbox(":material/description: Texte (.txt)", value=True, key="chk_q_txt")
+                    with col_o2:
+                        queue_export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=True, key="chk_q_srt")
+                    with col_o3:
+                        queue_export_md = st.checkbox(":material/markdown: Markdown (.md)", value=True, key="chk_q_md")
+                    with col_o4:
+                        queue_export_vis = st.checkbox("📸 Extraire schémas (Vidéo)", value=st.session_state.get("extract_visuals", True), key="chk_q_visuals", help="Capture automatiquement les slides et schémas montrés à l'écran.")
+                        st.session_state.extract_visuals = queue_export_vis
+                    st.markdown("""
+                    <div style="background: rgba(46, 116, 253, 0.08); border: 1px solid rgba(46, 116, 253, 0.25); border-radius: 8px; padding: 0.5rem 0.85rem; margin-top: 0.5rem; font-size: 0.8rem; color: #93c5fd; display: flex; align-items: center; gap: 6px;">
+                        <span>🎥</span>
+                        <span><b>Vidéo détectée :</b> L'extraction des schémas s'exécutera automatiquement. Vous retrouverez toutes les captures dans l'onglet dédié <b>📸 Schémas & Captures Vidéo</b>.</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    col_o1, col_o2, col_o3 = st.columns(3)
+                    with col_o1:
+                        queue_export_txt = st.checkbox(":material/description: Texte brut (.txt)", value=True, key="chk_q_txt")
+                    with col_o2:
+                        queue_export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=True, key="chk_q_srt")
+                    with col_o3:
+                        queue_export_md = st.checkbox(":material/markdown: Markdown (.md)", value=True, key="chk_q_md")
+
+                has_any_queue_export = queue_export_txt or queue_export_srt or queue_export_md
+                if not has_any_queue_export:
+                    st.warning("⚠️ Veuillez cocher au moins un format de sortie (.txt, .srt ou .md).")
 
                 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                 btn_label = (
@@ -1469,7 +1558,7 @@ def main():
                     else f":material/rocket_launch: Lancer la file d'attente ({len(uploaded_files)} fichiers)"
                 )
                 
-                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=st.session_state.is_processing, use_container_width=True):
+                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=(st.session_state.is_processing or not has_any_queue_export), use_container_width=True):
                     saved_paths = [save_uploaded_file(f) for f in uploaded_files]
                     output_dir = PROJECT_ROOT / "output"
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1501,6 +1590,9 @@ def main():
                                 "progress_queue": st.session_state.progress_queue,
                                 "stop_event": st.session_state.stop_event,
                                 "model_size": st.session_state.selected_model,
+                                "export_txt": queue_export_txt,
+                                "export_md": queue_export_md,
+                                "export_srt": queue_export_srt,
                                 "language": st.session_state.get("selected_language"),
                                 "task": st.session_state.get("selected_task", "transcribe"),
                                 "initial_prompt": st.session_state.get("initial_prompt"),
@@ -1511,7 +1603,9 @@ def main():
                                 "preprocess_audio": st.session_state.get("preprocess_audio", False),
                                 "normalize_volume": st.session_state.get("normalize_volume", False),
                                 "denoise": st.session_state.get("denoise_audio", False),
-                                "beam_size": st.session_state.get("beam_size", 5)
+                                "beam_size": st.session_state.get("beam_size", 5),
+                                "extract_visuals": queue_export_vis if has_any_video else False,
+                                "include_timestamps": st.session_state.get("include_timestamps", False)
                             }
                         )
                     else:
@@ -1529,8 +1623,11 @@ def main():
                                 "progress_queue": st.session_state.progress_queue,
                                 "stop_event": st.session_state.stop_event,
                                 "model_size": st.session_state.selected_model,
+                                "export_txt": queue_export_txt,
                                 "export_srt": queue_export_srt,
                                 "export_md": queue_export_md,
+                                "extract_visuals": queue_export_vis if has_any_video else False,
+                                "include_timestamps": st.session_state.get("include_timestamps", False),
                                 "language": st.session_state.get("selected_language"),
                                 "task": st.session_state.get("selected_task", "transcribe"),
                                 "initial_prompt": st.session_state.get("initial_prompt"),
@@ -1685,6 +1782,12 @@ def main():
                     else:
                         st.session_state.result_segments = []
 
+                    if msg.get("keyframes"):
+                        f_stem = Path(msg.get("file", "")).stem
+                        st.session_state[f"single_{f_stem}_keyframes"] = [
+                            VisualKeyframe.from_dict(k) for k in msg["keyframes"]
+                        ]
+
                     # Notification système native Windows Toast
                     if st.session_state.get("enable_notifications", True):
                         try:
@@ -1798,19 +1901,19 @@ def main():
             
             col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
-                ui.metric_card(
+                render_metric_card(
                     label="Total Analysé", 
                     value=str(stats.get("total", len(completed_files))), 
                     description="Fichiers traités dans la file" if is_queue else "Vidéos dans l'arborescence"
                 )
             with col_b2:
-                ui.metric_card(
+                render_metric_card(
                     label="Nouvellement Transcrites", 
                     value=str(stats.get("processed", len(completed_files))), 
                     description="Transcriptions générées"
                 )
             with col_b3:
-                ui.metric_card(
+                render_metric_card(
                     label="Déjà Existantes", 
                     value=str(stats.get("skipped", 0)), 
                     description="Ignorées (Smart Resume)"
@@ -1818,7 +1921,7 @@ def main():
             with col_b4:
                 b_tot = stats.get("total_elapsed_seconds")
                 b_val = format_friendly_duration(b_tot) if b_tot else "—"
-                ui.metric_card(
+                render_metric_card(
                     label="Temps de calcul",
                     value=b_val,
                     description="Durée réelle du lot"
@@ -2090,6 +2193,19 @@ def main():
             md_text = md_file.read_text(encoding="utf-8") if md_file.exists() else ""
             srt_text = srt_file.read_text(encoding="utf-8") if srt_file.exists() else ""
 
+            if not txt_text and st.session_state.get("result_segments"):
+                txt_text = generate_txt(st.session_state.result_segments, include_timestamps=st.session_state.get("include_timestamps", False))
+            if not md_text and st.session_state.get("result_segments"):
+                md_meta = {
+                    "filename": file_path.name if file_path else "transcription",
+                    "duration": st.session_state.get("last_audio_duration", 0.0),
+                    "language": st.session_state.get("detected_language", "auto"),
+                    "task": st.session_state.get("executed_task", "transcribe")
+                }
+                md_text = generate_markdown(st.session_state.result_segments, md_meta, include_timestamps=st.session_state.get("include_timestamps", False))
+            if not srt_text and st.session_state.get("result_segments"):
+                srt_text = generate_srt(st.session_state.result_segments)
+
             # Résumé des métriques IA et audio
             speakers = st.session_state.get("detected_speakers", [])
             lang_code = st.session_state.get("detected_language", "auto")
@@ -2110,25 +2226,25 @@ def main():
             if speakers:
                 col_res1, col_res2, col_res3, col_res4, col_res5 = st.columns(5)
                 with col_res1:
-                    ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
+                    render_metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
-                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
+                    render_metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
-                    ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
                 with col_res4:
-                    ui.metric_card(label="Locuteurs", value=f"{len(speakers)} voix", description=", ".join(speakers[:2]))
+                    render_metric_card(label="Locuteurs", value=f"{len(speakers)} voix", description=", ".join(speakers[:2]))
                 with col_res5:
-                    ui.metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
+                    render_metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
             else:
                 col_res1, col_res2, col_res3, col_res4 = st.columns(4)
                 with col_res1:
-                    ui.metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
+                    render_metric_card(label="Langue Identifiée", value=lang_label, description=f"Confiance : {prob_val}%")
                 with col_res2:
-                    ui.metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
+                    render_metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
-                    ui.metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
                 with col_res4:
-                    ui.metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
+                    render_metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
 
             st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
 
@@ -2155,9 +2271,12 @@ def main():
                                 md_text = md_text.replace(f"**{old_name}**", f"**{clean_new}**")
                                 md_text = md_text.replace(f'"{old_name}"', f'"{clean_new}"')
                                 st.session_state[f"rename_{old_name}"] = clean_new
-                        txt_file.write_text(txt_text, encoding="utf-8")
-                        md_file.write_text(md_text, encoding="utf-8")
-                        srt_file.write_text(srt_text, encoding="utf-8")
+                        if txt_file.exists():
+                            txt_file.write_text(txt_text, encoding="utf-8")
+                        if md_file.exists():
+                            md_file.write_text(md_text, encoding="utf-8")
+                        if srt_file.exists():
+                            srt_file.write_text(srt_text, encoding="utf-8")
                         st.success("Tous les fichiers et aperçus ont été mis à jour !")
                         st.rerun()
                 
@@ -2184,12 +2303,13 @@ def main():
             st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
             
             # Onglets élégants Linear / Shadcn
-            tab_edit, tab_txt, tab_md, tab_srt, tab_trans, tab_llm = st.tabs([
+            tab_edit, tab_txt, tab_md, tab_srt, tab_trans, tab_visual, tab_llm = st.tabs([
                 ":material/edit: Éditeur Audio-Texte",
                 ":material/description: Texte Brut (.txt)", 
                 ":material/markdown: Markdown (.md)", 
                 "⏱️ Sous-titres (.srt)", 
                 "🌐 Traduction Hors-Ligne",
+                ":material/photo_library: Schémas & Captures Vidéo",
                 ":material/smart_toy: Studio IA & Synthèse"
             ])
             
@@ -2201,12 +2321,27 @@ def main():
                     key_prefix="single"
                 )
             
+            # Segments courants pour mise à jour dynamique des horodatages
+            cur_segments = st.session_state.get("result_segments")
+            if not cur_segments and srt_text:
+                cur_segments = parse_srt(srt_text)
+
             with tab_txt:
-                col_t_dl, col_t_cp = st.columns([1, 1])
+                col_t_dl, col_t_cp, col_t_ts = st.columns([1.2, 1.2, 1.2], vertical_alignment="center")
+                with col_t_ts:
+                    show_ts = st.toggle(
+                        "⏱️ Horodatages",
+                        value=st.session_state.get("include_timestamps", False),
+                        key=f"toggle_ts_tab_txt_{base_name}",
+                        help="Affiche le début et la fin de chaque réplique au format [HH:MM:SS -> HH:MM:SS]."
+                    )
+
+                active_txt = generate_txt(cur_segments, include_speakers=True, include_timestamps=True) if (show_ts and cur_segments) else txt_text
+
                 with col_t_dl:
                     st.download_button(
                         label=":material/download: Télécharger le fichier texte (.txt)",
-                        data=txt_text,
+                        data=active_txt,
                         file_name=f"{base_name}.txt",
                         mime="text/plain",
                         use_container_width=True,
@@ -2214,16 +2349,36 @@ def main():
                     )
                 with col_t_cp:
                     if st.button("📋 Copier le texte brut", key="btn_copy_tab_txt", use_container_width=True):
-                        if copy_to_clipboard(txt_text):
+                        if copy_to_clipboard(active_txt):
                             st.toast("Texte brut copié dans le presse-papier !", icon="📋")
-                st.text_area("Transcription brute :", value=txt_text, height=350)
+                st.text_area("Transcription brute :", value=active_txt, height=350)
                 
             with tab_md:
-                col_m_dl, col_m_cp = st.columns([1, 1])
+                col_m_dl, col_m_cp, col_m_ts = st.columns([1.2, 1.2, 1.2], vertical_alignment="center")
+                with col_m_ts:
+                    show_md_ts = st.toggle(
+                        "⏱️ Horodatages",
+                        value=st.session_state.get("include_timestamps", False),
+                        key=f"toggle_ts_tab_md_{base_name}",
+                        help="Force l'affichage des timecodes devant chaque phrase dans le Markdown."
+                    )
+
+                if show_md_ts and cur_segments:
+                    md_meta = {
+                        "filename": file_path.name,
+                        "duration": st.session_state.get("last_audio_duration", 0.0),
+                        "language": st.session_state.get("detected_language", "fr"),
+                        "model": st.session_state.get("selected_model", "small"),
+                        "speakers": st.session_state.get("detected_speakers")
+                    }
+                    active_md = generate_markdown(cur_segments, md_meta, include_speakers=True, include_timestamps=True)
+                else:
+                    active_md = md_text
+
                 with col_m_dl:
                     st.download_button(
                         label=":material/download: Télécharger le Markdown (.md)",
-                        data=md_text,
+                        data=active_md,
                         file_name=f"{base_name}.md",
                         mime="text/markdown",
                         use_container_width=True,
@@ -2231,9 +2386,9 @@ def main():
                     )
                 with col_m_cp:
                     if st.button("📋 Copier le Markdown", key="btn_copy_tab_md", use_container_width=True):
-                        if copy_to_clipboard(md_text):
+                        if copy_to_clipboard(active_md):
                             st.toast("Markdown copié dans le presse-papier !", icon="📋")
-                st.markdown(md_text)
+                st.markdown(active_md)
                 
             with tab_srt:
                 col_s_dl, col_s_cp = st.columns([1, 1])
@@ -2375,6 +2530,16 @@ def main():
                     else:
                         st.info("Sélectionnez les langues et cliquez sur '🌐 Traduire' pour générer la version traduite.")
                 
+            with tab_visual:
+                render_visual_tab(
+                    file_path=file_path,
+                    output_dir=out_dir,
+                    segments=cur_segments,
+                    srt_text=srt_text,
+                    base_name=base_name,
+                    key_prefix="single"
+                )
+
             with tab_llm:
                 render_llm_templates(transcription_text=txt_text, key_prefix=f"single_{base_name}")
                 

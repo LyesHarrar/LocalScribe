@@ -32,9 +32,9 @@ def load_ai_config() -> Dict[str, Any]:
     path = get_ai_config_path()
     default_config = {
         "backend": "auto",           # "auto", "ollama", "lmstudio", "custom", "api"
-        "ollama_url": "http://localhost:11434",
-        "lmstudio_url": "http://localhost:1234/v1",
-        "custom_url": "http://localhost:8000/v1",
+        "ollama_url": "http://127.0.0.1:11434",
+        "lmstudio_url": "http://127.0.0.1:1234/v1",
+        "custom_url": "http://127.0.0.1:8000/v1",
         "selected_model": "",
         "api_provider": "mistral",   # "mistral", "openai", "groq", "gemini"
         "api_key": "",
@@ -45,6 +45,11 @@ def load_ai_config() -> Dict[str, Any]:
         try:
             saved = json.loads(path.read_text(encoding="utf-8"))
             default_config.update(saved)
+            # Remplacement proactif de localhost par 127.0.0.1 pour éliminer les latences DNS IPv6 sous Windows
+            if "localhost" in default_config.get("ollama_url", ""):
+                default_config["ollama_url"] = default_config["ollama_url"].replace("localhost", "127.0.0.1")
+            if "localhost" in default_config.get("lmstudio_url", ""):
+                default_config["lmstudio_url"] = default_config["lmstudio_url"].replace("localhost", "127.0.0.1")
         except Exception as e:
             logger.warning(f"Erreur lecture config IA : {e}")
     return default_config
@@ -66,9 +71,9 @@ def save_ai_config(config: Dict[str, Any]) -> bool:
 # DÉTECTION DES MOTEURS IA LOCAUX & DISTANTS
 # =========================================================================
 
-def check_ollama(base_url: str = "http://localhost:11434", timeout: float = 1.0) -> Dict[str, Any]:
+def check_ollama(base_url: str = "http://127.0.0.1:11434", timeout: float = 0.4) -> Dict[str, Any]:
     """Vérifie si Ollama est actif et liste les modèles installés."""
-    clean_url = base_url.rstrip("/")
+    clean_url = base_url.rstrip("/").replace("localhost", "127.0.0.1")
     try:
         req = urllib.request.Request(f"{clean_url}/api/tags", headers={"User-Agent": "LocalScribe"})
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -87,9 +92,9 @@ def check_ollama(base_url: str = "http://localhost:11434", timeout: float = 1.0)
     return {"available": False, "provider": "ollama", "url": clean_url, "models": []}
 
 
-def check_lmstudio(base_url: str = "http://localhost:1234/v1", timeout: float = 1.0) -> Dict[str, Any]:
+def check_lmstudio(base_url: str = "http://127.0.0.1:1234/v1", timeout: float = 0.4) -> Dict[str, Any]:
     """Vérifie si LM Studio ou un serveur compatible OpenAI est actif."""
-    clean_url = base_url.rstrip("/")
+    clean_url = base_url.rstrip("/").replace("localhost", "127.0.0.1")
     try:
         req = urllib.request.Request(f"{clean_url}/models", headers={"User-Agent": "LocalScribe"})
         with urllib.request.urlopen(req, timeout=timeout) as response:

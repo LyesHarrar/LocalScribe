@@ -7,8 +7,8 @@
   # 🎙️ LocalScribe
   ### Studio Desktop IA de Transcription, Diarisation & Traduction — 100% Locale, Privée & Zéro-Terminal
 
-  [![Version](https://img.shields.io/badge/Release-v2.4.5-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
-  [![Tests](https://img.shields.io/badge/Tests-162%2F162%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Version](https://img.shields.io/badge/Release-v2.5.0-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Tests](https://img.shields.io/badge/Tests-181%2F181%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero--Cloud-059669.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)
@@ -87,10 +87,17 @@ C'est un produit de bureau souverain, autonome et packagé "Zéro Terminal", qui
 - **Mode Dossier In-Place :** Scan récursif d'une arborescence complète avec reprise automatique (*Smart Resume*) pour ignorer les vidéos déjà traitées.
 - **Estimation de temps (ETA) en direct :** Calcul dynamique du facteur de vitesse (ex: `8.5x temps réel`) et du temps restant estimé.
 
+### 📸 Extraction Visuelle des Schémas Vidéo & Illustrations Markdown
+- **Détection sémantique des moments visuels :** Analyse heuristique bilingue (FR/EN) et IA locale pour identifier les moments où l'orateur présente un tableau, schéma, méthode, architecture ou slide.
+- **Capture chirurgicale FFmpeg :** Extraction à la milliseconde exacte (~50ms par capture, zéro terminal) avec renommage sémantique automatique (`schema-architecture.png`).
+- **Markdown enrichi & Galerie dédiée :** Onglet interactif avec galerie visuelle, transcription `.md` intégrant les captures d'écran, et archive ZIP globale embarquant les images.
+- **Contrôle d'horodatages [HH:MM:SS] :** Toggles interactifs dans les onglets `.txt` et `.md` pour afficher ou masquer instantanément les timestamps avec adaptation dynamique des boutons de copie et de téléchargement.
+
 ### 🗄️ Historique Persistant SQLite & Exports 1-Clic
 - **Base de données locale :** Historisation automatique de chaque transcription avec métriques de confiance et horodatages.
 - **Moteur de recherche plein texte :** Retrouvez n'importe quelle intervention prononcée dans des centaines d'heures d'enregistrements.
-- **Exports multi-formats :** `.txt` brut, `.srt` sous-titres, `.md` Markdown structuré, et archive `.zip` globale en un clic.
+- **Exports multi-formats :** `.txt` brut déverrouillé, `.srt` sous-titres, `.md` Markdown structuré, et archive `.zip` globale en un clic.
+- **Navigation durcie & 0 ms :** Rendu instantané de l'historique sans surcoût d'iframes et navigation d'onglets garantie sans rebond.
 
 ---
 
@@ -174,10 +181,10 @@ Le projet a été développé selon les principes stricts définis dans le docum
 1. **La Réalité Prime sur la Théorie (Empirical Verification) :**
    Aucune fonctionnalité n'est considérée comme achevée sans validation par des tests unitaires automatisés.
 2. **Couverture de Tests Maximale :**
-   **162 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
+   **181 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
    ```bash
    python -m unittest discover -s tests -p "test_*.py"
-   # Ran 162 tests — OK
+   # Ran 181 tests — OK
    ```
 3. **Écritures Disque Atomiques :**
    Toute génération de transcription utilise le pattern d'écriture temporaire `.tmp` suivi d'un renommage atomique, garantissant qu'aucun fichier ne soit corrompu en cas de fermeture inopinée.
@@ -189,7 +196,7 @@ Le projet a été développé selon les principes stricts définis dans le docum
 ### Option A : Version Portable Autonome (Recommandée — Tout Public)
 *Aucune installation de Python requise.*
 1. Rendez-vous dans la section **[Releases](https://github.com/LyesHarrar/LocalScribe/releases)**.
-2. Téléchargez l'archive `LocalScribe-Portable-v2.4.5.zip`.
+2. Téléchargez l'archive `LocalScribe-Portable-v2.5.0.zip`.
 3. Dézippez le dossier et double-cliquez sur **`LocalScribe.exe`**.
 
 ### Option B : Environnement Développeur

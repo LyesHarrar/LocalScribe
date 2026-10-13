@@ -1223,6 +1223,121 @@ class TestTranscriptionEngine(unittest.TestCase):
                 # Aucun résidu .tmp ne subsiste
                 self.assertFalse((tmp_path / "out" / "corrupt.txt.tmp").exists())
 
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_file_without_txt_export(self, mock_whisper_class):
+        """Vérifie que la désélection de .txt n'écrit que le .md et conserve l'historique."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+                
+        class DummyInfo:
+            duration = 5.0
+            language = "fr"
+            language_probability = 0.99
+            
+        mock_model.transcribe.return_value = ([DummySegment(0.0, 5.0, "Ceci est un test sans TXT")], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "test_no_txt.mp3"
+            fake_audio.write_bytes(b"content")
+            out_dir = tmp_path / "out"
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_file_threaded(
+                file_path=fake_audio,
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                export_txt=False,
+                export_md=True,
+                export_srt=False
+            )
+            
+            # .txt et .srt ne doivent PAS exister, mais .md DOIT exister
+            self.assertFalse((out_dir / "test_no_txt.txt").exists())
+            self.assertFalse((out_dir / "test_no_txt.srt").exists())
+            self.assertTrue((out_dir / "test_no_txt.md").exists())
+            
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+            complete_msg = [m for m in messages if m.get("status") == "file_complete"][0]
+            self.assertEqual(complete_msg["txt_path"], "")
+            self.assertTrue(complete_msg["md_path"].endswith("test_no_txt.md"))
+
+    @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_without_txt_export_and_smart_resume(self, mock_whisper_class):
+        """Vérifie le Smart Resume et le respect de export_txt=False en mode lot."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummySegment:
+            def __init__(self, start, end, text):
+                self.start = start
+                self.end = end
+                self.text = text
+                
+        class DummyInfo:
+            duration = 4.0
+            language = "fr"
+            language_probability = 0.95
+            
+        mock_model.transcribe.return_value = ([DummySegment(0.0, 4.0, "Batch sans TXT")], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fake_audio = tmp_path / "audio_batch_notxt.mp3"
+            fake_audio.write_bytes(b"content")
+            out_dir = tmp_path / "out"
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            # 1er run avec export_txt=False et export_md=True
+            transcribe_batch_threaded(
+                files=[fake_audio],
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event,
+                export_txt=False,
+                export_md=True,
+                export_srt=False
+            )
+            
+            self.assertFalse((out_dir / "audio_batch_notxt.txt").exists())
+            self.assertTrue((out_dir / "audio_batch_notxt.md").exists())
+            
+            # 2ème run : le fichier doit être ignoré par le Smart Resume car audio_batch_notxt.md existe déjà
+            q2 = queue.Queue()
+            transcribe_batch_threaded(
+                files=[fake_audio],
+                output_dir=out_dir,
+                profile=profile,
+                progress_queue=q2,
+                stop_event=stop_event,
+                export_txt=False,
+                export_md=True,
+                export_srt=False
+            )
+            
+            msgs2 = []
+            while not q2.empty():
+                msgs2.append(q2.get())
+            statuses2 = [m.get("status") for m in msgs2]
+            self.assertIn("file_skipped", statuses2)
+
 
 if __name__ == "__main__":
     unittest.main()

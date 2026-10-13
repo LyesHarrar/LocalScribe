@@ -169,25 +169,34 @@ def generate_srt(segments: List[Any], include_speakers: bool = True) -> str:
     return "\n".join(srt_content)
 
 
-def generate_txt(segments: List[Any], include_speakers: bool = True) -> str:
-    """Génère un contenu texte brut avec ou sans préfixes de locuteurs."""
+def generate_txt(
+    segments: List[Any], 
+    include_speakers: bool = True,
+    include_timestamps: bool = False
+) -> str:
+    """Génère un contenu texte brut avec ou sans préfixes de locuteurs et horodatages."""
     lines = []
     for seg in segments:
         text = seg.text.strip()
         speaker = getattr(seg, "speaker", None)
+        prefix = ""
+        if include_timestamps:
+            s_start = format_timestamp_short(getattr(seg, "start", 0.0))
+            s_end = format_timestamp_short(getattr(seg, "end", 0.0))
+            prefix += f"[{s_start} -> {s_end}] "
         if include_speakers and speaker:
-            lines.append(f"[{speaker}] {text}")
-        else:
-            lines.append(text)
+            prefix += f"[{speaker}] "
+        lines.append(f"{prefix}{text}")
     return "\n".join(lines)
 
 
 def generate_markdown(
     segments: List[Any], 
     metadata: Dict[str, Any], 
-    include_speakers: bool = True
+    include_speakers: bool = True,
+    include_timestamps: bool = False
 ) -> str:
-    """Génère un fichier Markdown avec un bloc YAML Front-matter et mise en page dialogue si locuteurs."""
+    """Génère un fichier Markdown avec un bloc YAML Front-matter et mise en page dialogue/horodatée."""
     date_str = datetime.now().isoformat()
     filename = metadata.get("filename", "unknown")
     duration = metadata.get("duration", 0.0)
@@ -230,7 +239,15 @@ def generate_markdown(
             text = seg.text.strip()
             dialogue_lines.append(f"- `[{s_start} -> {s_end}]` **{speaker}** : {text}")
         md_content += "\n".join(dialogue_lines)
+    elif include_timestamps:
+        ts_lines = []
+        for seg in segments:
+            s_start = format_timestamp_short(getattr(seg, "start", 0.0))
+            s_end = format_timestamp_short(getattr(seg, "end", 0.0))
+            text = seg.text.strip()
+            ts_lines.append(f"- `[{s_start} -> {s_end}]` {text}")
+        md_content += "\n".join(ts_lines)
     else:
-        md_content += generate_txt(segments, include_speakers=include_speakers)
+        md_content += generate_txt(segments, include_speakers=include_speakers, include_timestamps=False)
         
     return md_content

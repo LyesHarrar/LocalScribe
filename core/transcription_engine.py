@@ -88,7 +88,12 @@ def transcribe_file_threaded(
     preprocess_audio: bool = False,
     normalize_volume: bool = True,
     denoise: bool = False,
-    beam_size: int = 5
+    beam_size: int = 5,
+    extract_visuals: bool = False,
+    include_timestamps: bool = False,
+    export_txt: bool = True,
+    export_md: bool = True,
+    export_srt: bool = True
 ) -> None:
     """
     Transcrit un fichier unique en arrière-plan.
@@ -333,15 +338,45 @@ def transcribe_file_threaded(
             "speakers": detected_speakers if detected_speakers else None
         }
         
-        # Écritures atomiques
-        tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
-        tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")
-        tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
+        # Écritures atomiques conditionnelles
+        targets_to_write = []
+        if export_txt:
+            tmp_txt.write_text(generate_txt(segments, include_timestamps=include_timestamps), encoding="utf-8")
+            targets_to_write.append((out_txt, tmp_txt))
+        if export_md:
+            tmp_md.write_text(generate_markdown(segments, metadata, include_timestamps=include_timestamps), encoding="utf-8")
+            targets_to_write.append((out_md, tmp_md))
+        if export_srt:
+            tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
+            targets_to_write.append((out_srt, tmp_srt))
         
-        for target, tmp in [(out_txt, tmp_txt), (out_md, tmp_md), (out_srt, tmp_srt)]:
+        for target, tmp in targets_to_write:
             if target.exists():
                 target.unlink()
             tmp.rename(target)
+
+        # Extraction visuelle des schémas/slides vidéo si activée
+        extracted_keyframes = []
+        if extract_visuals and not stop_event.is_set():
+            try:
+                from core.visual_extractor import is_video_file, process_video_visuals, generate_illustrated_markdown
+                if is_video_file(file_path):
+                    progress_queue.put({
+                        "status": "extracting_visuals",
+                        "file": str(file_path),
+                        "message": "🖼️ Détection des schémas et captures vidéo..."
+                    })
+                    extracted_keyframes, _ = process_video_visuals(
+                        video_path=file_path,
+                        segments=segments,
+                        output_dir=output_dir,
+                        use_ai=False
+                    )
+                    if extracted_keyframes:
+                        ill_md = generate_illustrated_markdown(segments, metadata, extracted_keyframes)
+                        (output_dir / f"{base_name}_illustre.md").write_text(ill_md, encoding="utf-8")
+            except Exception as ve:
+                logger.warning(f"Erreur lors de l'extraction visuelle automatique : {ve}")
 
         # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8 via CTranslate2)
         translated_txt_path = ""
@@ -431,11 +466,11 @@ def transcribe_file_threaded(
                 "task": task,
                 "model": model_to_use,
                 "speakers": detected_speakers if detected_speakers else None,
-                "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else "",
+                "transcript_text": out_txt.read_text(encoding="utf-8") if out_txt.exists() else generate_txt(segments, include_timestamps=include_timestamps),
                 "segments": serialized_segments,
-                "txt_path": str(out_txt),
-                "md_path": str(out_md),
-                "srt_path": str(out_srt)
+                "txt_path": str(out_txt) if export_txt else "",
+                "md_path": str(out_md) if export_md else "",
+                "srt_path": str(out_srt) if export_srt else ""
             })
         except Exception:
             pass
@@ -445,6 +480,9 @@ def transcribe_file_threaded(
             "status": "file_complete",
             "file": str(file_path),
             "output_dir": str(output_dir),
+            "txt_path": str(out_txt) if export_txt else "",
+            "md_path": str(out_md) if export_md else "",
+            "srt_path": str(out_srt) if export_srt else "",
             "language": detected_lang,
             "language_probability": lang_prob,
             "duration": duration,
@@ -458,7 +496,8 @@ def transcribe_file_threaded(
             "translated_md_path": translated_md_path,
             "translated_text": translated_text_content,
             "preprocessed": pre_meta.get("preprocessed", False),
-            "filters_applied": pre_meta.get("filters_applied", "")
+            "filters_applied": pre_meta.get("filters_applied", ""),
+            "keyframes": [kf.to_dict() for kf in extracted_keyframes] if extracted_keyframes else []
         })
         
     except Exception as e:
@@ -478,6 +517,7 @@ def transcribe_batch_threaded(
     progress_queue: Optional[queue.Queue] = None,
     stop_event: Optional[threading.Event] = None,
     model_size: Optional[str] = None,
+    export_txt: bool = True,
     export_srt: bool = False,
     export_md: bool = False,
     language: Optional[str] = None,
@@ -492,7 +532,9 @@ def transcribe_batch_threaded(
     preprocess_audio: bool = False,
     normalize_volume: bool = True,
     denoise: bool = False,
-    beam_size: int = 5
+    beam_size: int = 5,
+    extract_visuals: bool = False,
+    include_timestamps: bool = False
 ) -> None:
     """
     Transcription par lot (file d'attente ou scan récursif) :
@@ -639,8 +681,13 @@ def transcribe_batch_threaded(
                 out_srt = file_path.with_suffix(".srt")
                 out_md = file_path.with_suffix(".md")
 
-            # Smart Resume : si le .txt existe et est non vide, on passe
-            if out_txt.exists() and out_txt.stat().st_size > 0:
+            # Smart Resume : si l'un des formats d'export (.txt, .md, .srt) existe déjà et est non vide, on passe
+            already_done = False
+            for cand in [out_txt, out_md, out_srt]:
+                if cand.exists() and cand.stat().st_size > 0:
+                    already_done = True
+                    break
+            if already_done:
                 skipped_count += 1
                 if batch_run_id:
                     try:
@@ -854,11 +901,12 @@ def transcribe_batch_threaded(
                         })
 
                 # 4. Écriture atomique dans le dossier de destination
-                tmp_txt = dest_dir / f"{out_txt.name}.tmp"
-                tmp_txt.write_text(generate_txt(segments), encoding="utf-8")
-                if out_txt.exists():
-                    out_txt.unlink()
-                tmp_txt.rename(out_txt)
+                if export_txt:
+                    tmp_txt = dest_dir / f"{out_txt.name}.tmp"
+                    tmp_txt.write_text(generate_txt(segments, include_timestamps=include_timestamps), encoding="utf-8")
+                    if out_txt.exists():
+                        out_txt.unlink()
+                    tmp_txt.rename(out_txt)
 
                 # Exports optionnels (.srt, .md)
                 if export_srt:
@@ -868,23 +916,48 @@ def transcribe_batch_threaded(
                         out_srt.unlink()
                     tmp_srt.rename(out_srt)
 
+                metadata = {
+                    "filename": file_path.name,
+                    "duration": duration,
+                    "language": detected_lang,
+                    "language_probability": f"{lang_prob}%",
+                    "task": task,
+                    "model": model_to_use,
+                    "speakers": detected_speakers if detected_speakers else None
+                }
+
                 if export_md:
                     tmp_md = dest_dir / f"{out_md.name}.tmp"
-                    metadata = {
-                        "filename": file_path.name,
-                        "duration": duration,
-                        "language": detected_lang,
-                        "language_probability": f"{lang_prob}%",
-                        "task": task,
-                        "model": model_to_use,
-                        "speakers": detected_speakers if detected_speakers else None
-                    }
-                    tmp_md.write_text(generate_markdown(segments, metadata), encoding="utf-8")
+                    tmp_md.write_text(generate_markdown(segments, metadata, include_timestamps=include_timestamps), encoding="utf-8")
                     if out_md.exists():
                         out_md.unlink()
                     tmp_md.rename(out_md)
 
-                txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else ""
+                txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else generate_txt(segments, include_timestamps=include_timestamps)
+
+                # Extraction visuelle des schémas/slides vidéo si activée
+                extracted_keyframes = []
+                if extract_visuals and not stop_event.is_set():
+                    try:
+                        from core.visual_extractor import is_video_file, process_video_visuals, generate_illustrated_markdown
+                        if is_video_file(file_path):
+                            progress_queue.put({
+                                "status": "extracting_visuals",
+                                "file": str(file_path),
+                                "file_name": file_path.name,
+                                "message": f"🖼️ Détection des schémas et captures vidéo ({file_path.name})..."
+                            })
+                            extracted_keyframes, _ = process_video_visuals(
+                                video_path=file_path,
+                                segments=segments,
+                                output_dir=dest_dir,
+                                use_ai=False
+                            )
+                            if extracted_keyframes:
+                                ill_md = generate_illustrated_markdown(segments, metadata, extracted_keyframes)
+                                (dest_dir / f"{base_name}_illustre.md").write_text(ill_md, encoding="utf-8")
+                    except Exception as ve:
+                        logger.warning(f"Erreur extraction visuelle batch {file_path.name} : {ve}")
 
                 # Traduction neuronale hors-ligne optionnelle (NLLB-200 INT8)
                 translated_txt_path = ""
@@ -971,7 +1044,7 @@ def transcribe_batch_threaded(
                         "speakers": detected_speakers if detected_speakers else None,
                         "transcript_text": txt_text_content,
                         "segments": serialized_segments,
-                        "txt_path": str(out_txt),
+                        "txt_path": str(out_txt) if export_txt else "",
                         "md_path": str(out_md) if export_md else "",
                         "srt_path": str(out_srt) if export_srt else ""
                     })
@@ -1005,7 +1078,7 @@ def transcribe_batch_threaded(
                     "language_probability": lang_prob,
                     "speakers": detected_speakers,
                     "segments": serialized_segments,
-                    "txt_path": str(out_txt),
+                    "txt_path": str(out_txt) if export_txt else "",
                     "srt_path": str(out_srt) if export_srt else "",
                     "md_path": str(out_md) if export_md else "",
                     "text": txt_text_content,
@@ -1013,7 +1086,8 @@ def transcribe_batch_threaded(
                     "translated_txt_path": translated_txt_path,
                     "translated_srt_path": translated_srt_path,
                     "translated_md_path": translated_md_path,
-                    "translated_text": translated_text_content
+                    "translated_text": translated_text_content,
+                    "keyframes": [kf.to_dict() for kf in extracted_keyframes] if extracted_keyframes else []
                 }
                 completed_files.append(completed_info)
 
@@ -1021,7 +1095,7 @@ def transcribe_batch_threaded(
                     "status": "file_complete",
                     "file": str(file_path),
                     "file_name": file_path.name,
-                    "txt_path": str(out_txt),
+                    "txt_path": str(out_txt) if export_txt else "",
                     "srt_path": str(out_srt) if export_srt else "",
                     "md_path": str(out_md) if export_md else "",
                     "current_idx": idx,
@@ -1037,7 +1111,8 @@ def transcribe_batch_threaded(
                     "translated_srt_path": translated_srt_path,
                     "translated_md_path": translated_md_path,
                     "translated_text": translated_text_content,
-                    "preprocessed": pre_meta.get("preprocessed", False)
+                    "preprocessed": pre_meta.get("preprocessed", False),
+                    "keyframes": [kf.to_dict() for kf in extracted_keyframes] if extracted_keyframes else []
                 })
 
             except Exception as file_err:

@@ -148,6 +148,21 @@ class TestNavigationFlow(unittest.TestCase):
         next_btn.click().run()
         self.assertEqual(at.session_state.get("batch_page_num"), 2)
 
+    def test_switching_to_history_tab_renders_smoothly(self):
+        """Vérifie que la bascule vers l'onglet Historique est immédiate et s'affiche sans blocage."""
+        at = AppTest.from_file(APP_PATH, default_timeout=20)
+        at.run()
+
+        history_mode = ":material/history: Historique & Bibliothèque"
+        # Basculer vers l'onglet Historique
+        at.segmented_control[0].select(history_mode).run()
+
+        self.assertEqual(at.session_state["current_active_mode"], history_mode)
+        self.assertFalse(at.session_state.get("transcription_done", False))
+        # Vérifier que des éléments de la vue historique sont présents
+        has_history_content = any("Bibliothèque & Historique" in str(getattr(m, "value", "")) for m in at.markdown)
+        self.assertTrue(has_history_content, "L'en-tête markdown de l'historique doit être visible")
+
 
 if __name__ == "__main__":
     unittest.main()
