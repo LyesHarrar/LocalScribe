@@ -93,6 +93,32 @@ def clear_whisper_model_cache() -> None:
         gc.collect()
 
 
+def safe_atomic_replace(tmp_file: Path, target_file: Path, max_retries: int = 3, retry_delay: float = 0.05) -> None:
+    """
+    Remplace de manière atomique target_file par tmp_file.
+    Sur Windows, os.replace() est atomique et écrase la destination.
+    En cas de verrou NTFS temporaire (antivirus, indexeur Windows), réessaie avec un backoff court.
+    """
+    tmp_path = Path(tmp_file).resolve()
+    target_path = Path(target_file).resolve()
+    for attempt in range(max_retries):
+        try:
+            tmp_path.replace(target_path)
+            return
+        except (PermissionError, OSError) as e:
+            if attempt == max_retries - 1:
+                try:
+                    if target_path.exists():
+                        target_path.unlink(missing_ok=True)
+                    tmp_path.replace(target_path)
+                    return
+                except Exception:
+                    raise e
+            import time
+            time.sleep(retry_delay)
+
+
+
 SUPPORTED_EXTENSIONS: Set[str] = {
     ".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v",
     ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"
@@ -400,9 +426,7 @@ def transcribe_file_threaded(
             targets_to_write.append((out_srt, tmp_srt))
         
         for target, tmp in targets_to_write:
-            if target.exists():
-                target.unlink()
-            tmp.rename(target)
+            safe_atomic_replace(tmp, target)
 
         # Extraction visuelle des schémas/slides vidéo si activée
         extracted_keyframes = []
@@ -476,9 +500,7 @@ def transcribe_file_threaded(
                 tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
                 
                 for target, tmp in [(out_txt_tr, tmp_txt_tr), (out_srt_tr, tmp_srt_tr), (out_md_tr, tmp_md_tr)]:
-                    if target.exists():
-                        target.unlink()
-                    tmp.rename(target)
+                    safe_atomic_replace(tmp, target)
                     
                 translated_txt_path = str(out_txt_tr)
                 translated_srt_path = str(out_srt_tr)
@@ -953,17 +975,13 @@ def transcribe_batch_threaded(
                 if export_txt:
                     tmp_txt = dest_dir / f"{out_txt.name}.tmp"
                     tmp_txt.write_text(generate_txt(segments, include_timestamps=include_timestamps), encoding="utf-8")
-                    if out_txt.exists():
-                        out_txt.unlink()
-                    tmp_txt.rename(out_txt)
+                    safe_atomic_replace(tmp_txt, out_txt)
 
                 # Exports optionnels (.srt, .md)
                 if export_srt:
                     tmp_srt = dest_dir / f"{out_srt.name}.tmp"
                     tmp_srt.write_text(generate_srt(segments), encoding="utf-8")
-                    if out_srt.exists():
-                        out_srt.unlink()
-                    tmp_srt.rename(out_srt)
+                    safe_atomic_replace(tmp_srt, out_srt)
 
                 metadata = {
                     "filename": file_path.name,
@@ -978,9 +996,7 @@ def transcribe_batch_threaded(
                 if export_md:
                     tmp_md = dest_dir / f"{out_md.name}.tmp"
                     tmp_md.write_text(generate_markdown(segments, metadata, include_timestamps=include_timestamps), encoding="utf-8")
-                    if out_md.exists():
-                        out_md.unlink()
-                    tmp_md.rename(out_md)
+                    safe_atomic_replace(tmp_md, out_md)
 
                 txt_text_content = out_txt.read_text(encoding="utf-8") if out_txt.exists() else generate_txt(segments, include_timestamps=include_timestamps)
 
@@ -1032,9 +1048,7 @@ def transcribe_batch_threaded(
                         out_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt"
                         tmp_txt_tr = dest_dir / f"{base_name}_{target_translation}.txt.tmp"
                         tmp_txt_tr.write_text(generate_txt(trans_segs), encoding="utf-8")
-                        if out_txt_tr.exists():
-                            out_txt_tr.unlink()
-                        tmp_txt_tr.rename(out_txt_tr)
+                        safe_atomic_replace(tmp_txt_tr, out_txt_tr)
                         translated_txt_path = str(out_txt_tr)
                         translated_text_content = out_txt_tr.read_text(encoding="utf-8") if out_txt_tr.exists() else ""
                         
@@ -1042,9 +1056,7 @@ def transcribe_batch_threaded(
                             out_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt"
                             tmp_srt_tr = dest_dir / f"{base_name}_{target_translation}.srt.tmp"
                             tmp_srt_tr.write_text(generate_srt(trans_segs), encoding="utf-8")
-                            if out_srt_tr.exists():
-                                out_srt_tr.unlink()
-                            tmp_srt_tr.rename(out_srt_tr)
+                            safe_atomic_replace(tmp_srt_tr, out_srt_tr)
                             translated_srt_path = str(out_srt_tr)
                             
                         if export_md:
@@ -1061,9 +1073,7 @@ def transcribe_batch_threaded(
                                 "speakers": detected_speakers if detected_speakers else None
                             }
                             tmp_md_tr.write_text(generate_markdown(trans_segs, meta_tr), encoding="utf-8")
-                            if out_md_tr.exists():
-                                out_md_tr.unlink()
-                            tmp_md_tr.rename(out_md_tr)
+                            safe_atomic_replace(tmp_md_tr, out_md_tr)
                             translated_md_path = str(out_md_tr)
                     except Exception as t_err:
                         logger.warning(f"Erreur lors de la traduction du fichier batch {file_path.name}: {t_err}")

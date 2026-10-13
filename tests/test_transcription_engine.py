@@ -1373,6 +1373,30 @@ class TestTranscriptionEngine(unittest.TestCase):
         clear_whisper_model_cache()
         self.assertEqual(len(_MODEL_CACHE), 0)
 
+    def test_safe_atomic_replace_resilience(self):
+        """Vérifie le remplacement atomique et résilient de fichiers, y compris avec caractères Unicode."""
+        from core.transcription_engine import safe_atomic_replace
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            tmp_src = tmp_root / "document_temporaire_accentué.tmp"
+            target_dst = tmp_root / "document_définitif_accentué_🚀.txt"
+
+            # 1. Remplacement initial (création du fichier cible)
+            tmp_src.write_text("Contenu initial de test", encoding="utf-8")
+            safe_atomic_replace(tmp_src, target_dst)
+
+            self.assertFalse(tmp_src.exists())
+            self.assertTrue(target_dst.exists())
+            self.assertEqual(target_dst.read_text(encoding="utf-8"), "Contenu initial de test")
+
+            # 2. Remplacement par écrasement atomique d'un fichier existant
+            tmp_src.write_text("Nouveau contenu écrasé", encoding="utf-8")
+            safe_atomic_replace(tmp_src, target_dst)
+
+            self.assertFalse(tmp_src.exists())
+            self.assertTrue(target_dst.exists())
+            self.assertEqual(target_dst.read_text(encoding="utf-8"), "Nouveau contenu écrasé")
+
 
 if __name__ == "__main__":
     unittest.main()

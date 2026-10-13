@@ -250,16 +250,26 @@ def preprocess_audio(
         return input_path, {"preprocessed": False, "error": str(e)}
 
 
-def cleanup_preprocessed_file(preprocessed_path: Path, original_path: Path) -> None:
+def cleanup_preprocessed_file(preprocessed_path: Path, original_path: Path, max_retries: int = 3) -> None:
     """
     Supprime le fichier temporaire généré par le prétraitement
     en garantissant que le fichier original n'est JAMAIS touché.
+    Intègre une boucle de réessai résiliente sous Windows contre les verrous de fichiers éphémères.
     """
     try:
         prep_p = Path(preprocessed_path).resolve()
         orig_p = Path(original_path).resolve()
         if prep_p != orig_p and prep_p.exists():
-            prep_p.unlink(missing_ok=True)
-            logger.info(f"Fichier temporaire prétraité nettoyé : {prep_p.name}")
+            import time
+            import gc
+            for attempt in range(max_retries):
+                try:
+                    prep_p.unlink(missing_ok=True)
+                    logger.info(f"Fichier temporaire prétraité nettoyé : {prep_p.name}")
+                    return
+                except (PermissionError, OSError):
+                    gc.collect()
+                    if attempt < max_retries - 1:
+                        time.sleep(0.08)
     except Exception as e:
         logger.debug(f"Impossible de supprimer le fichier temporaire prétraité : {e}")
