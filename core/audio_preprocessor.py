@@ -188,8 +188,13 @@ def preprocess_audio(
     cmd = [
         ffmpeg_bin,
         "-y",
+        "-nostats",
+        "-loglevel", "error",
+        "-threads", "0",
         "-i", str(input_path),
         "-vn",
+        "-sn",
+        "-dn",
         "-ac", str(target_channels),
         "-ar", str(target_sample_rate)
     ]

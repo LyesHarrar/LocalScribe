@@ -10,7 +10,7 @@ import time
 import queue
 import threading
 from pathlib import Path
-from typing import Optional, List, Set
+from typing import Optional, List, Set, Dict, Tuple, Any
 import logging
 
 logger = logging.getLogger("LocalScribe.Engine")
@@ -42,6 +42,55 @@ def get_models_dir() -> Path:
     m_dir = PROJECT_ROOT / "models"
     m_dir.mkdir(parents=True, exist_ok=True)
     return m_dir
+
+
+_MODEL_CACHE: Dict[Tuple[str, str, str], Any] = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+
+
+def get_cached_whisper_model(
+    model_name: str,
+    device: str,
+    compute_type: str,
+    download_root: str
+) -> WhisperModel:
+    """
+    Récupère ou instancie un modèle WhisperModel avec mise en cache mémoire thread-safe.
+    Évite de recharger plusieurs gigaoctets de poids lors de transcriptions successives.
+    Ne met pas en cache les mocks lors des tests unitaires pour préserver l'isolation.
+    """
+    # Si WhisperModel est patché/mocké (ex: unittest), instancier directement sans cache
+    is_mock = hasattr(WhisperModel, "mock_calls") or hasattr(WhisperModel, "assert_called")
+    cache_key = (model_name, device, compute_type)
+
+    with _MODEL_CACHE_LOCK:
+        if not is_mock and cache_key in _MODEL_CACHE:
+            logger.info(f"Modèle Whisper réutilisé depuis le cache mémoire : {cache_key}")
+            return _MODEL_CACHE[cache_key]
+
+        # Libération propre de l'ancien modèle pour désengorger la VRAM et la RAM
+        if not is_mock and _MODEL_CACHE:
+            _MODEL_CACHE.clear()
+            import gc
+            gc.collect()
+
+        model = WhisperModel(
+            model_name,
+            device=device,
+            compute_type=compute_type,
+            download_root=download_root
+        )
+        if not is_mock:
+            _MODEL_CACHE[cache_key] = model
+        return model
+
+
+def clear_whisper_model_cache() -> None:
+    """Vide explicitement le cache du modèle Whisper et force le garbage collection."""
+    with _MODEL_CACHE_LOCK:
+        _MODEL_CACHE.clear()
+        import gc
+        gc.collect()
 
 
 SUPPORTED_EXTENSIONS: Set[str] = {
@@ -143,7 +192,7 @@ def transcribe_file_threaded(
         compute_type = profile.compute_type if profile else "int8"
 
         try:
-            model = WhisperModel(
+            model = get_cached_whisper_model(
                 model_to_use, 
                 device=device, 
                 compute_type=compute_type,
@@ -159,7 +208,7 @@ def transcribe_file_threaded(
                 })
                 device = "cpu"
                 compute_type = "int8"
-                model = WhisperModel(
+                model = get_cached_whisper_model(
                     model_to_use, 
                     device=device, 
                     compute_type=compute_type,
@@ -195,7 +244,7 @@ def transcribe_file_threaded(
                 })
                 device = "cpu"
                 compute_type = "int8"
-                model = WhisperModel(
+                model = get_cached_whisper_model(
                     model_to_use, 
                     device=device, 
                     compute_type=compute_type,
@@ -257,7 +306,7 @@ def transcribe_file_threaded(
                 })
                 device = "cpu"
                 compute_type = "int8"
-                model = WhisperModel(
+                model = get_cached_whisper_model(
                     model_to_use, 
                     device=device, 
                     compute_type=compute_type,
@@ -608,7 +657,7 @@ def transcribe_batch_threaded(
         compute_type = profile.compute_type if profile else "int8"
 
         try:
-            model = WhisperModel(
+            model = get_cached_whisper_model(
                 model_to_use, 
                 device=device, 
                 compute_type=compute_type,
@@ -623,7 +672,7 @@ def transcribe_batch_threaded(
                 })
                 device = "cpu"
                 compute_type = "int8"
-                model = WhisperModel(
+                model = get_cached_whisper_model(
                     model_to_use, 
                     device=device, 
                     compute_type=compute_type,
@@ -775,7 +824,7 @@ def transcribe_batch_threaded(
                         })
                         device = "cpu"
                         compute_type = "int8"
-                        model = WhisperModel(
+                        model = get_cached_whisper_model(
                             model_to_use, 
                             device=device, 
                             compute_type=compute_type,
@@ -835,7 +884,7 @@ def transcribe_batch_threaded(
                         })
                         device = "cpu"
                         compute_type = "int8"
-                        model = WhisperModel(
+                        model = get_cached_whisper_model(
                             model_to_use, 
                             device=device, 
                             compute_type=compute_type,

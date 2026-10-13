@@ -1338,6 +1338,41 @@ class TestTranscriptionEngine(unittest.TestCase):
             statuses2 = [m.get("status") for m in msgs2]
             self.assertIn("file_skipped", statuses2)
 
+    def test_whisper_model_cache_lifecycle(self):
+        """Vérifie le cycle de vie du cache WhisperModel et la libération mémoire."""
+        from core.transcription_engine import get_cached_whisper_model, clear_whisper_model_cache, _MODEL_CACHE
+        
+        clear_whisper_model_cache()
+        self.assertEqual(len(_MODEL_CACHE), 0)
+
+        # Simulation d'un appel avec WhisperModel simulé
+        class FakeWhisper:
+            def __init__(self, name, device, compute_type, download_root):
+                self.name = name
+                self.device = device
+                self.compute_type = compute_type
+                self.download_root = download_root
+
+        with patch("core.transcription_engine.WhisperModel", FakeWhisper):
+            # Premier appel : instanciation et mise en cache
+            m1 = get_cached_whisper_model("small", "cpu", "int8", "/tmp/models")
+            self.assertIsInstance(m1, FakeWhisper)
+            self.assertEqual(len(_MODEL_CACHE), 1)
+
+            # Deuxième appel avec mêmes paramètres : réutilisation depuis le cache
+            m2 = get_cached_whisper_model("small", "cpu", "int8", "/tmp/models")
+            self.assertIs(m1, m2)
+
+            # Troisième appel avec paramètres différents : remplacement dans le cache
+            m3 = get_cached_whisper_model("medium", "cpu", "int8", "/tmp/models")
+            self.assertIsNot(m1, m3)
+            self.assertEqual(len(_MODEL_CACHE), 1)
+            self.assertEqual(list(_MODEL_CACHE.keys())[0], ("medium", "cpu", "int8"))
+
+        # Nettoyage
+        clear_whisper_model_cache()
+        self.assertEqual(len(_MODEL_CACHE), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
