@@ -102,7 +102,7 @@ def render_visual_tab(
         launch_extract = st.button(
             btn_label, 
             type="primary" if not current_keyframes else "secondary", 
-            use_container_width=True, 
+            width="stretch", 
             key=f"{key_prefix}_btn_launch_visual"
         )
 
@@ -166,7 +166,7 @@ def render_visual_tab(
             data=zip_bytes,
             file_name=f"{base_name}_captures.zip",
             mime="application/zip",
-            use_container_width=True,
+            width="stretch",
             key=f"{key_prefix}_dl_zip_btn"
         )
 
@@ -178,7 +178,7 @@ def render_visual_tab(
     }
     ill_md_content = generate_illustrated_markdown(actual_segments, metadata, current_keyframes)
     with col_a2:
-        if st.button("📋 Copier le Markdown Illustré", key=f"{key_prefix}_copy_ill_md", use_container_width=True):
+        if st.button("📋 Copier le Markdown Illustré", key=f"{key_prefix}_copy_ill_md", width="stretch"):
             if copy_to_clipboard(ill_md_content):
                 st.toast("Markdown illustré copié dans le presse-papier !", icon="📋")
             else:
@@ -191,13 +191,13 @@ def render_visual_tab(
             data=ill_md_content,
             file_name=f"{base_name}_illustre.md",
             mime="text/markdown",
-            use_container_width=True,
+            width="stretch",
             key=f"{key_prefix}_dl_ill_md_btn"
         )
 
     # 4. Ouvrir le dossier des captures dans Windows
     with col_a4:
-        if st.button("📁 Ouvrir Dossier", key=f"{key_prefix}_open_captures_dir", use_container_width=True):
+        if st.button("📁 Ouvrir Dossier", key=f"{key_prefix}_open_captures_dir", width="stretch"):
             if captures_dir.is_dir():
                 try:
                     os.startfile(str(captures_dir))
@@ -221,7 +221,7 @@ def render_visual_tab(
             """, unsafe_allow_html=True)
 
             if kf.image_path and Path(kf.image_path).is_file():
-                st.image(kf.image_path, use_container_width=True)
+                st.image(kf.image_path, width="stretch")
                 
                 st.markdown(f"""
                 <div style="background: #11131a; border-left: 3px solid #3b82f6; padding: 0.5rem 0.75rem; border-radius: 0 6px 6px 0; margin-top: -0.25rem; margin-bottom: 0.5rem; font-size: 0.78rem; color: #cbd5e1; font-style: italic;">
@@ -235,7 +235,7 @@ def render_visual_tab(
                     data=img_bytes,
                     file_name=kf.image_filename,
                     mime="image/jpeg",
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key_prefix}_dl_img_{idx}"
                 )
             else:

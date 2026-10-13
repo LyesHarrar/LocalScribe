@@ -22,7 +22,7 @@ from core.local_ai_engine import (
 
 def _render_ai_config_popover(backends: Dict[str, Any], key_prefix: str = "main"):
     """Affiche le volet de configuration de l'IA locale et des modèles."""
-    with st.popover("⚙️ Configurer l'IA & Modèles", use_container_width=True):
+    with st.popover("⚙️ Configurer l'IA & Modèles", width="stretch"):
         st.markdown("#### Configuration du Moteur IA")
         st.caption("LocalScribe privilégie les moteurs 100% locaux et hors-ligne (Ollama, LM Studio).")
         
@@ -106,7 +106,7 @@ def _render_ai_config_popover(backends: Dict[str, Any], key_prefix: str = "main"
             help="Votre clé reste strictement sur votre machine locale dans data/ai_config.json."
         )
 
-        if st.button("💾 Enregistrer la configuration", type="primary", use_container_width=True, key=f"{key_prefix}_save_cfg"):
+        if st.button("💾 Enregistrer la configuration", type="primary", width="stretch", key=f"{key_prefix}_save_cfg"):
             cfg["backend"] = selected_backend
             cfg["ollama_url"] = ollama_url.strip()
             cfg["lmstudio_url"] = lmstudio_url.strip()
@@ -172,7 +172,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
             )
 
     with col_refresh:
-        if st.button("🔄 Actualiser", key=f"{key_prefix}_btn_refresh", use_container_width=True, help="Re-scanner les moteurs Ollama et LM Studio"):
+        if st.button("🔄 Actualiser", key=f"{key_prefix}_btn_refresh", width="stretch", help="Re-scanner les moteurs Ollama et LM Studio"):
             from core.local_ai_engine import clear_backend_cache
             clear_backend_cache()
             st.rerun()
@@ -241,7 +241,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                         btn_label,
                         key=f"{key_prefix}_btn_gen_{tpl_id}",
                         type="primary" if not has_res else "secondary",
-                        use_container_width=True,
+                        width="stretch",
                         disabled=disabled_ai,
                         help=help_msg
                     ):
@@ -266,15 +266,15 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                         st.code(full_prompt, language="text")
                         col_c1, col_c2, col_c3 = st.columns(3)
                         with col_c1:
-                            if st.button(":material/content_paste: Copier", key=f"{key_prefix}_cp_pr_{tpl_id}", use_container_width=True):
+                            if st.button(":material/content_paste: Copier", key=f"{key_prefix}_cp_pr_{tpl_id}", width="stretch"):
                                 if copy_to_clipboard(full_prompt):
                                     st.toast("Prompt copié dans le presse-papier !", icon="📋")
                                 else:
                                     st.error("Échec de copie.")
                         with col_c2:
-                            st.link_button("🌐 ChatGPT", "https://chatgpt.com", use_container_width=True)
+                            st.link_button("🌐 ChatGPT", "https://chatgpt.com", width="stretch")
                         with col_c3:
-                            st.link_button("🌐 Claude", "https://claude.ai/new", use_container_width=True)
+                            st.link_button("🌐 Claude", "https://claude.ai/new", width="stretch")
 
                 # Affichage du résultat s'il existe
                 if has_res:
@@ -298,7 +298,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                         # Boutons d'export et de copie du résultat
                         col_r_cp, col_r_dl, col_r_clr = st.columns([2, 2, 1])
                         with col_r_cp:
-                            if st.button(f"📋 Copier le résultat", key=f"{key_prefix}_cp_res_{tpl_id}", use_container_width=True):
+                            if st.button(f"📋 Copier le résultat", key=f"{key_prefix}_cp_res_{tpl_id}", width="stretch"):
                                 if copy_to_clipboard(text_out):
                                     st.toast("Résultat copié dans le presse-papier !", icon="📋")
                                 else:
@@ -310,7 +310,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                                 file_name=f"Synthese_{tpl_id}.md",
                                 mime="text/markdown",
                                 key=f"{key_prefix}_dl_res_{tpl_id}",
-                                use_container_width=True
+                                width="stretch"
                             )
                         with col_r_clr:
                             if st.button("🗑️", key=f"{key_prefix}_clr_res_{tpl_id}", help="Effacer ce résultat"):
@@ -340,7 +340,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                 "✨ Poser la question",
                 key=f"{key_prefix}_qa_ask_btn",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 disabled=not bool(active_b)
             )
 
@@ -383,7 +383,7 @@ def render_llm_templates(transcription_text: str = "", key_prefix: str = "main")
                     
                     c_qa_cp, c_qa_space = st.columns([2, 4])
                     with c_qa_cp:
-                        if st.button("📋 Copier la réponse", key=f"{key_prefix}_cp_qa_{idx}", use_container_width=True):
+                        if st.button("📋 Copier la réponse", key=f"{key_prefix}_cp_qa_{idx}", width="stretch"):
                             if copy_to_clipboard(item["answer"]):
                                 st.toast("Réponse copiée !", icon="📋")
                     st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)

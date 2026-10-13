@@ -360,7 +360,7 @@ def render_editor_tab(
             match_case = st.checkbox("Casse exacte", key=f"{pfx}chk_match_case")
         with col_f4:
             st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
-            if st.button("Remplacer tout", key=f"{pfx}btn_exec_replace", use_container_width=True):
+            if st.button("Remplacer tout", key=f"{pfx}btn_exec_replace", width="stretch"):
                 if find_str.strip():
                     new_segs, count = search_and_replace_segments(
                         segments, find_str.strip(), replace_str, match_case=match_case
@@ -382,7 +382,7 @@ def render_editor_tab(
         )
     with col_save_top:
         st.markdown("<div style='margin-top: 0.3rem;'></div>", unsafe_allow_html=True)
-        if st.button("💾 Enregistrer toutes les modifications", type="primary", use_container_width=True, key=f"{pfx}btn_save_top"):
+        if st.button("💾 Enregistrer toutes les modifications", type="primary", width="stretch", key=f"{pfx}btn_save_top"):
             res = save_edited_transcription(
                 output_dir=output_dir,
                 base_name=base_name,
@@ -424,7 +424,7 @@ def render_editor_tab(
                 with col_btn:
                     # Bouton d'écoute ciblée
                     time_label = f"▶️ {format_timestamp_short(s.start)}"
-                    if st.button(time_label, key=f"{pfx}btn_play_{seg_id}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", use_container_width=True):
+                    if st.button(time_label, key=f"{pfx}btn_play_{seg_id}", help=f"Écouter de {format_timestamp_short(s.start)} à {format_timestamp_short(s.end)}", width="stretch"):
                         st.session_state[f"{pfx}seek_time"] = s.start
                         st.rerun()
                 
@@ -443,13 +443,13 @@ def render_editor_tab(
                 with col_act1:
                     # Fusionner avec le segment suivant
                     if idx < total_segs - 1:
-                        if st.button("🔗 Fusionner", key=f"{pfx}btn_merge_{seg_id}", help="Fusionner avec le segment suivant", use_container_width=True):
+                        if st.button("🔗 Fusionner", key=f"{pfx}btn_merge_{seg_id}", help="Fusionner avec le segment suivant", width="stretch"):
                             _update_segments(merge_adjacent_segments(segments, idx))
                             st.rerun()
                 
                 with col_act2:
                     # Supprimer le segment
-                    if st.button("🗑️", key=f"{pfx}btn_del_{seg_id}", help="Supprimer ce segment", use_container_width=True):
+                    if st.button("🗑️", key=f"{pfx}btn_del_{seg_id}", help="Supprimer ce segment", width="stretch"):
                         _update_segments(delete_segment(segments, idx))
                         st.rerun()
 
@@ -486,7 +486,7 @@ def render_editor_tab(
         edited_df = st.data_editor(
             df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "ID": st.column_config.NumberColumn("ID", disabled=True, width="small"),
                 "Début (s)": st.column_config.NumberColumn("Début (s)", step=0.1, format="%.2f", width="small"),
@@ -498,7 +498,7 @@ def render_editor_tab(
         )
 
         # Synchronisation du DataFrame vers segments
-        if st.button("📥 Appliquer les modifications du tableau", key=f"{pfx}btn_sync_df", type="secondary", use_container_width=True):
+        if st.button("📥 Appliquer les modifications du tableau", key=f"{pfx}btn_sync_df", type="secondary", width="stretch"):
             new_segs = []
             for i, row in edited_df.iterrows():
                 try:
@@ -521,7 +521,7 @@ def render_editor_tab(
     st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
     col_save_b1, col_save_b2 = st.columns([1, 1])
     with col_save_b1:
-        if st.button("💾 Enregistrer et mettre à jour tous les formats", type="primary", use_container_width=True, key=f"{pfx}btn_save_bottom"):
+        if st.button("💾 Enregistrer et mettre à jour tous les formats", type="primary", width="stretch", key=f"{pfx}btn_save_bottom"):
             res = save_edited_transcription(
                 output_dir=output_dir,
                 base_name=base_name,
@@ -534,7 +534,7 @@ def render_editor_tab(
             st.rerun()
 
     with col_save_b2:
-        if st.button("📋 Copier le texte complet corrigé", key=f"{pfx}btn_copy_edited_all", use_container_width=True):
+        if st.button("📋 Copier le texte complet corrigé", key=f"{pfx}btn_copy_edited_all", width="stretch"):
             full_txt = "\n".join(
                 f"[{s.speaker}] {s.text}" if s.speaker else s.text
                 for s in st.session_state[seg_state_key]
