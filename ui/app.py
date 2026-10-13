@@ -794,9 +794,25 @@ def render_history_view():
     
     if not records:
         if search_query:
-            st.info(f"Aucune transcription ne correspond à votre recherche '{search_query}'.")
+            st.markdown(f"""
+            <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.2rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🔍</div>
+                <div style="color: #f8fafc; font-weight: 600; font-size: 1.05rem;">Aucun résultat pour « {search_query} »</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.4rem; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                    Vérifiez l'orthographe ou essayez un mot-clé plus large. Videz la barre de recherche pour réafficher l'ensemble des enregistrements.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.info("Aucune transcription dans l'historique. Effectuez votre première transcription pour la voir apparaître ici !")
+            st.markdown("""
+            <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.5rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📚</div>
+                <div style="color: #f8fafc; font-weight: 600; font-size: 1.15rem;">Votre bibliothèque de transcriptions est vide</div>
+                <div style="color: #94a3b8; font-size: 0.88rem; margin-top: 0.5rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                    Toutes les transcriptions réalisées en Mode Fichier Unique ou en Mode Dossier & Lots seront automatiquement conservées ici avec recherche plein texte, métriques et export.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         return
 
     PAGE_SIZE = 10
@@ -1469,6 +1485,16 @@ def main():
                     st.warning("Aucun fichier vidéo ou audio supporté trouvé dans ce répertoire.")
             elif st.session_state.target_folder:
                 st.error("Le dossier spécifié n'existe pas ou n'est pas accessible.")
+            else:
+                st.markdown("""
+                <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.2rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                    <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
+                    <div style="color: #f8fafc; font-weight: 600; font-size: 1.05rem;">Prêt à scanner un dossier média</div>
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.4rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                        Cliquez sur <b>Parcourir</b> ou collez le chemin d'un dossier pour détecter automatiquement toutes vos vidéos et fichiers audio (MP4, MKV, MP3, WAV, etc.) et les transcrire par lot.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         # --- MODE 2 : FILE D'ATTENTE MULTI-FICHIERS (DRAG & DROP) ---
         else:

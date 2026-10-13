@@ -459,6 +459,34 @@ CUSTOM_CSS = """
         color: #ffffff !important;
         box-shadow: 0 0 12px rgba(56, 189, 248, 0.18) !important;
     }
+
+    /* 21. Micro-interactions & Accessibilité (Focus, Hover, Kbd) */
+    kbd {
+        background-color: #18181b;
+        color: #94a3b8;
+        border: 1px solid #3f3f46;
+        border-bottom: 2px solid #3f3f46;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 0.75rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    div[data-testid="stExpander"] {
+        transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    div[data-testid="stExpander"]:hover {
+        border-color: rgba(46, 116, 253, 0.4) !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .stButton > button:focus-visible,
+    .stDownloadButton > button:focus-visible {
+        outline: 2px solid #38bdf8 !important;
+        outline-offset: 2px !important;
+    }
 </style>
 """
 
