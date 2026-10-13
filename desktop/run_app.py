@@ -178,9 +178,9 @@ def _apply_win32_dark_mode(hwnd: int) -> None:
             DwmSetWindowAttribute(hwnd, 19, byref(val), sizeof(val))
 
         # 2. Teinte personnalisée de la barre de titre (Windows 11 build 22000+)
-        # DWMWA_CAPTION_COLOR = 35 (COLORREF format BGR : #09090b -> 0x000B0909)
+        # DWMWA_CAPTION_COLOR = 35 (COLORREF format BGR : #0f172a -> 0x002A170F)
         DWMWA_CAPTION_COLOR = 35
-        caption_color = c_int(0x000B0909)
+        caption_color = c_int(0x002A170F)
         DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, byref(caption_color), sizeof(caption_color))
 
         # 3. Couleur du texte du titre (Windows 11 build 22000+)
@@ -485,7 +485,7 @@ def launch_desktop():
                 width=1320,
                 height=880,
                 min_size=(960, 640),
-                background_color="#05070e",
+                background_color="#0f172a",
                 text_select=True,
                 zoomable=True
             )
