@@ -7,8 +7,8 @@
   # 🎙️ LocalScribe
   ### Studio Desktop IA de Transcription, Diarisation & Traduction — 100% Locale, Privée & Zéro-Terminal
 
-  [![Version](https://img.shields.io/badge/Release-v2.5.0-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
-  [![Tests](https://img.shields.io/badge/Tests-181%2F181%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Version](https://img.shields.io/badge/Release-v2.6.0-blue.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
+  [![Tests](https://img.shields.io/badge/Tests-183%2F183%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline%20%2F%20Zero--Cloud-059669.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)

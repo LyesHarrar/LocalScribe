@@ -35,21 +35,33 @@ def get_default_db_path() -> Path:
 
 
 def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    """Ouvre une connexion SQLite avec support des dictionnaires Row."""
+    """Ouvre une connexion SQLite ultra-rapide avec PRAGMAs optimisés et support Row."""
     path = db_path if db_path is not None else get_default_db_path()
-    conn = sqlite3.connect(str(path), timeout=10.0)
+    conn = sqlite3.connect(str(path), timeout=15.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -64000")  # 64 Mo de cache mémoire
+        conn.execute("PRAGMA temp_store = MEMORY")
+    except Exception:
+        pass
     return conn
 
 
 def init_db(db_path: Optional[Path] = None, force: bool = False) -> None:
-    """Initialise le schéma de la base de données s'il n'existe pas déjà."""
+    """Initialise le schéma de la base de données s'il n'existe pas déjà avec optimisations WAL."""
     target_path = str((db_path if db_path is not None else get_default_db_path()).resolve())
     if not force and target_path in _INITIALIZED_DBS:
         return
 
     conn = get_db_connection(db_path)
     try:
+        # Activer le mode WAL pour des lectures concurrentes instantanées sans blocage d'écriture
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except Exception:
+            pass
+
         with conn:
             conn.execute("""
             CREATE TABLE IF NOT EXISTS transcriptions (
@@ -72,6 +84,7 @@ def init_db(db_path: Optional[Path] = None, force: bool = False) -> None:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_transcriptions_created ON transcriptions(created_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_transcriptions_filename ON transcriptions(filename)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_transcriptions_lang ON transcriptions(language)")
 
             # Migration progressive si la table existait déjà sans la colonne 'segments'
             cursor = conn.execute("PRAGMA table_info(transcriptions)")
@@ -100,6 +113,7 @@ def init_db(db_path: Optional[Path] = None, force: bool = False) -> None:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_runs_started ON batch_runs(started_at DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_runs_folder ON batch_runs(folder_path)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_runs_status ON batch_runs(status)")
 
         _INITIALIZED_DBS.add(target_path)
     finally:

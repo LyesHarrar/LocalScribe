@@ -204,7 +204,7 @@ def render_sidebar():
     """Barre latérale épurée avec profils 1-clic, jauge dynamique et options avancées."""
     with st.sidebar:
         if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), use_container_width=True)
+            st.image(str(LOGO_PATH), width="stretch")
         else:
             st.title("LocalScribe")
             
@@ -447,7 +447,7 @@ def render_sidebar():
                     render_badge("⚠️ Modèle non téléchargé", color="#f59e0b", bg="rgba(245, 158, 11, 0.1)"), 
                     unsafe_allow_html=True
                 )
-                if st.button("📥 Télécharger NLLB-200 (622 Mo)", key="btn_dl_nllb_sidebar", use_container_width=True):
+                if st.button("📥 Télécharger NLLB-200 (622 Mo)", key="btn_dl_nllb_sidebar", width="stretch"):
                     with st.spinner("Téléchargement du modèle de traduction en cours (622 Mo)..."):
                         try:
                             ensure_translation_model()
@@ -591,7 +591,7 @@ def render_sidebar():
                 eta = st.session_state.get("eta_str", "Calcul...")
                 st.caption(f"⚡ Vitesse : **{speed}** • ETA : **{eta}**")
 
-            if st.button("🛑 Interrompre", key="btn_stop_sidebar", type="secondary", use_container_width=True):
+            if st.button("🛑 Interrompre", key="btn_stop_sidebar", type="secondary", width="stretch"):
                 if "stop_event" in st.session_state and st.session_state.stop_event:
                     st.session_state.stop_event.set()
                 st.session_state.is_processing = False
@@ -719,17 +719,17 @@ def render_history_view():
         st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
         col_act1, col_act2, col_act3 = st.columns([2.2, 1.8, 1.5])
         with col_act1:
-            if st.button("▶️ Reprendre ce dossier en 1-clic", key="btn_resume_folder_hist", type="primary", use_container_width=True, help="Charge automatiquement ce dossier en Mode Dossier pour continuer la transcription des fichiers restants"):
+            if st.button("▶️ Reprendre ce dossier en 1-clic", key="btn_resume_folder_hist", type="primary", width="stretch", help="Charge automatiquement ce dossier en Mode Dossier pour continuer la transcription des fichiers restants"):
                 st.session_state.target_folder = f_path
                 st.session_state.force_folder_rescan = True
                 st.session_state.pending_mode_switch = ":material/folder: Mode Dossier (Scan Récursif)"
                 st.toast(f"Dossier '{f_name}' chargé en Mode Dossier !", icon="📁")
                 st.rerun()
         with col_act2:
-            if st.button("📂 Ouvrir dans l'Explorateur", key="btn_open_folder_hist", use_container_width=True, help="Ouvre le dossier dans l'explorateur de fichiers Windows"):
+            if st.button("📂 Ouvrir dans l'Explorateur", key="btn_open_folder_hist", width="stretch", help="Ouvre le dossier dans l'explorateur de fichiers Windows"):
                 open_folder_in_explorer(Path(f_path))
         with col_act3:
-            if st.button("📋 Copier le chemin", key="btn_copy_folder_hist", use_container_width=True, help="Copie le chemin complet dans le presse-papier"):
+            if st.button("📋 Copier le chemin", key="btn_copy_folder_hist", width="stretch", help="Copie le chemin complet dans le presse-papier"):
                 if copy_to_clipboard(f_path):
                     st.toast("Chemin du dossier copié !", icon="📋")
                 else:
@@ -752,7 +752,7 @@ def render_history_view():
                         st.markdown(f"**📁 {r_name}** — *{r_date}* — `{r_done}/{r_tot}` fichiers ({r_pct:.0f} %)")
                         st.caption(f"`{r_p}`")
                     with c_btn:
-                        if st.button("Charger", key=f"btn_load_batch_run_{r_id}", use_container_width=True):
+                        if st.button("Charger", key=f"btn_load_batch_run_{r_id}", width="stretch"):
                             st.session_state.target_folder = r_p
                             st.session_state.force_folder_rescan = True
                             st.session_state.pending_mode_switch = ":material/folder: Mode Dossier (Scan Récursif)"
@@ -773,11 +773,11 @@ def render_history_view():
         )
     with col_action:
         if stats['total_count'] > 0:
-            with st.popover("🗑️ Vider tout", use_container_width=True):
+            with st.popover("🗑️ Vider tout", width="stretch"):
                 st.markdown("##### ⚠️ Effacer l'historique ?")
                 st.markdown(f"Cette action supprimera les **{stats['total_count']}** transcriptions enregistrées.")
                 st.caption("Les fichiers audio source sur votre disque restent préservés.")
-                if st.button("🔴 Confirmer la suppression", type="primary", use_container_width=True, key="btn_confirm_clear_history"):
+                if st.button("🔴 Confirmer la suppression", type="primary", width="stretch", key="btn_confirm_clear_history"):
                     cleared = clear_history()
                     # Nettoyer toutes les clés de session liées à l'historique
                     for k in list(st.session_state.keys()):
@@ -794,9 +794,25 @@ def render_history_view():
     
     if not records:
         if search_query:
-            st.info(f"Aucune transcription ne correspond à votre recherche '{search_query}'.")
+            st.markdown(f"""
+            <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.2rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🔍</div>
+                <div style="color: #f8fafc; font-weight: 600; font-size: 1.05rem;">Aucun résultat pour « {search_query} »</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.4rem; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                    Vérifiez l'orthographe ou essayez un mot-clé plus large. Videz la barre de recherche pour réafficher l'ensemble des enregistrements.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.info("Aucune transcription dans l'historique. Effectuez votre première transcription pour la voir apparaître ici !")
+            st.markdown("""
+            <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.5rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📚</div>
+                <div style="color: #f8fafc; font-weight: 600; font-size: 1.15rem;">Votre bibliothèque de transcriptions est vide</div>
+                <div style="color: #94a3b8; font-size: 0.88rem; margin-top: 0.5rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                    Toutes les transcriptions réalisées en Mode Fichier Unique ou en Mode Dossier & Lots seront automatiquement conservées ici avec recherche plein texte, métriques et export.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         return
 
     PAGE_SIZE = 10
@@ -859,7 +875,7 @@ def render_history_view():
             # Boutons de copie, téléchargement et suppression
             col_cp, col_d1, col_d2, col_d3, col_del = st.columns([1.8, 1.2, 1.2, 1.2, 0.9])
             with col_cp:
-                if st.button("📋 Copier le texte", key=f"btn_cp_hist_{rec_id}", use_container_width=True, help="Copier l'intégralité du texte dans le presse-papier"):
+                if st.button("📋 Copier le texte", key=f"btn_cp_hist_{rec_id}", width="stretch", help="Copier l'intégralité du texte dans le presse-papier"):
                     if copy_to_clipboard(txt_content):
                         st.toast("Transcription copiée dans le presse-papier !", icon="📋")
                     else:
@@ -871,7 +887,7 @@ def render_history_view():
                     file_name=f"{Path(filename).stem}.txt",
                     mime="text/plain",
                     key=f"dl_txt_{rec_id}",
-                    use_container_width=True
+                    width="stretch"
                 )
             with col_d2:
                 # Contenu Markdown
@@ -889,7 +905,7 @@ def render_history_view():
                     file_name=f"{Path(filename).stem}.md",
                     mime="text/markdown",
                     key=f"dl_md_{rec_id}",
-                    use_container_width=True
+                    width="stretch"
                 )
             with col_d3:
                 # Contenu SRT
@@ -906,12 +922,12 @@ def render_history_view():
                         file_name=f"{Path(filename).stem}.srt",
                         mime="text/plain",
                         key=f"dl_srt_{rec_id}",
-                        use_container_width=True
+                        width="stretch"
                     )
                 else:
                     st.caption("SRT non disponible")
             with col_del:
-                if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", use_container_width=True, help="Supprimer cet enregistrement de la base"):
+                if st.button("🗑️ Suppr.", key=f"del_rec_{rec_id}", width="stretch", help="Supprimer cet enregistrement de la base"):
                     delete_record(rec_id)
                     for k in list(st.session_state.keys()):
                         if str(rec_id) in k:
@@ -923,7 +939,7 @@ def render_history_view():
             with st.expander("✏️ Éditer & Synchroniser cette transcription...", expanded=False):
                 ed_loaded_key = f"ed_loaded_{rec_id}"
                 if not st.session_state.get(ed_loaded_key, False):
-                    if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_ed_{rec_id}", type="secondary", use_container_width=True):
+                    if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_ed_{rec_id}", type="secondary", width="stretch"):
                         st.session_state[ed_loaded_key] = True
                         st.rerun()
                     st.caption("Charge le lecteur audio synchronisé et la table d'édition.")
@@ -965,7 +981,7 @@ def render_history_view():
                         chosen_h_code = h_trans_codes[h_trans_labels.index(chosen_h_label)]
                     with col_ht_btn:
                         st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
-                        run_h_trans = st.button("🌐 Traduire", key=f"btn_h_tr_{rec_id}", use_container_width=True)
+                        run_h_trans = st.button("🌐 Traduire", key=f"btn_h_tr_{rec_id}", width="stretch")
                         
                     h_tr_key = f"hist_tr_{rec_id}_{chosen_h_code}"
                     if run_h_trans:
@@ -982,7 +998,7 @@ def render_history_view():
                         st.text_area(f"Résultat ({chosen_h_label}) :", value=st.session_state[h_tr_key], height=120, key=f"ta_h_res_{rec_id}")
                         col_h_cp, col_h_dl = st.columns(2)
                         with col_h_cp:
-                            if st.button("📋 Copier", key=f"btn_h_cp_{rec_id}", use_container_width=True):
+                            if st.button("📋 Copier", key=f"btn_h_cp_{rec_id}", width="stretch"):
                                 if copy_to_clipboard(st.session_state[h_tr_key]):
                                     st.toast("Copié !", icon="📋")
                         with col_h_dl:
@@ -992,14 +1008,14 @@ def render_history_view():
                                 file_name=f"{Path(filename).stem}_{chosen_h_code}.txt",
                                 mime="text/plain",
                                 key=f"dl_h_tr_{rec_id}",
-                                use_container_width=True
+                                width="stretch"
                             )
 
             # Studio IA & Synthèse pour l'historique
             with st.expander("🤖 Studio IA & Synthèse...", expanded=False):
                 ai_loaded_key = f"ai_loaded_{rec_id}"
                 if not st.session_state.get(ai_loaded_key, False):
-                    if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_ai_{rec_id}", type="secondary", use_container_width=True):
+                    if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_ai_{rec_id}", type="secondary", width="stretch"):
                         st.session_state[ai_loaded_key] = True
                         st.rerun()
                     st.caption("Détecte et connecte vos modèles locaux Ollama / LM Studio.")
@@ -1011,13 +1027,13 @@ def render_history_view():
         st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
         col_p1, col_p2, col_p3 = st.columns([1, 2, 1], vertical_alignment="center")
         with col_p1:
-            if st.button("◀ Précédent", disabled=(curr_page <= 1), use_container_width=True, key="btn_hist_prev_page"):
+            if st.button("◀ Précédent", disabled=(curr_page <= 1), width="stretch", key="btn_hist_prev_page"):
                 st.session_state.hist_page_num = curr_page - 1
                 st.rerun()
         with col_p2:
             st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.88rem;'>Page <strong style='color: #f8fafc;'>{curr_page}</strong> sur <strong style='color: #f8fafc;'>{total_pages}</strong></div>", unsafe_allow_html=True)
         with col_p3:
-            if st.button("Suivant ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="btn_hist_next_page"):
+            if st.button("Suivant ▶", disabled=(curr_page >= total_pages), width="stretch", key="btn_hist_next_page"):
                 st.session_state.hist_page_num = curr_page + 1
                 st.rerun()
 
@@ -1056,7 +1072,7 @@ def main():
         st.markdown(f"<div style='margin-top: 0.2rem;'>{badges_html}</div>", unsafe_allow_html=True)
 
     with col_act_guide:
-        with st.popover("❓ Guide", use_container_width=True):
+        with st.popover("❓ Guide", width="stretch"):
             st.markdown("### 🚀 Guide Express LocalScribe")
             st.markdown(
                 "**LocalScribe** est votre studio de transcription, diarisation et traduction "
@@ -1087,7 +1103,7 @@ def main():
             st.caption("🛡️ 100% Hors-Ligne • Zéro Télémétrie • Vos fichiers restent sur votre machine.")
 
     with col_act_pop:
-        with st.popover(f"ℹ️ v{__version__}", use_container_width=True):
+        with st.popover(f"ℹ️ v{__version__}", width="stretch"):
             st.markdown(f"### LocalScribe `v{__version__}`")
             st.markdown("<p style='color: #94a3b8; font-size: 0.85rem;'>Studio de transcription, diarisation, traduction et montage synchronisé 100% autonome et hors-ligne.</p>", unsafe_allow_html=True)
             st.divider()
@@ -1096,7 +1112,7 @@ def main():
             if "update_info" not in st.session_state:
                 st.session_state.update_info = None
                 
-            if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", use_container_width=True):
+            if st.button("🔍 Vérifier les mises à jour", key="btn_check_updates", width="stretch"):
                 with st.spinner("Vérification sur GitHub Releases..."):
                     st.session_state.update_info = check_for_updates()
                     
@@ -1109,7 +1125,7 @@ def main():
                     if up_info.get("release_notes"):
                         with st.expander("Notes de version (Changelog)"):
                             st.markdown(up_info["release_notes"])
-                    st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], use_container_width=True)
+                    st.link_button("⬇️ Télécharger la mise à jour", up_info["release_url"], width="stretch")
                 elif up_info["status"] == "no_release":
                     st.info(f"ℹ️ {up_info['message']}")
                 elif up_info["status"] == "offline":
@@ -1213,7 +1229,7 @@ def main():
                 st.error(f"⚠️ **Erreur lors du traitement précédent :** {st.session_state.last_error}")
             with col_dismiss:
                 st.markdown("<div style='margin-top: 0.2rem;'></div>", unsafe_allow_html=True)
-                if st.button("✕ Fermer", key="btn_dismiss_last_error", use_container_width=True):
+                if st.button("✕ Fermer", key="btn_dismiss_last_error", width="stretch"):
                     del st.session_state["last_error"]
                     st.rerun()
 
@@ -1246,7 +1262,7 @@ def main():
                     st.session_state.force_folder_rescan = True
             with col_btn:
                 st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
-                if st.button(":material/folder_open: Parcourir", use_container_width=True):
+                if st.button(":material/folder_open: Parcourir", width="stretch"):
                     picked = select_folder_dialog()
                     if picked and picked != st.session_state.target_folder:
                         st.session_state.target_folder = picked
@@ -1254,7 +1270,7 @@ def main():
                         st.rerun()
             with col_clear:
                 st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
-                if st.button("✕ Effacer", use_container_width=True, help="Effacer le chemin du dossier actuel"):
+                if st.button("✕ Effacer", width="stretch", help="Effacer le chemin du dossier actuel"):
                     st.session_state.target_folder = ""
                     if "cached_folder_path" in st.session_state:
                         del st.session_state["cached_folder_path"]
@@ -1305,16 +1321,16 @@ def main():
                 st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
                 col_act1, col_act2, col_act3 = st.columns([1, 1.2, 1.3], vertical_alignment="center")
                 with col_act1:
-                    if st.button("🔄 Actualiser", key="btn_refresh_folder_scan", use_container_width=True, help="Rescanner le dossier en cas d'ajout ou suppression de fichiers"):
+                    if st.button("🔄 Actualiser", key="btn_refresh_folder_scan", width="stretch", help="Rescanner le dossier en cas d'ajout ou suppression de fichiers"):
                         st.session_state.force_folder_rescan = True
                         st.rerun()
 
                 with col_act2:
-                    if st.button("📂 Ouvrir le dossier", key="btn_open_folder_explorer", use_container_width=True, help="Ouvrir ce dossier dans l'Explorateur Windows"):
+                    if st.button("📂 Ouvrir le dossier", key="btn_open_folder_explorer", width="stretch", help="Ouvrir ce dossier dans l'Explorateur Windows"):
                         open_folder_in_explorer(current_folder)
 
                 with col_act3:
-                    with st.popover("🗑️ Nettoyer les vidéos", use_container_width=True, help="Déplacer en toute sécurité les vidéos vers la Corbeille Windows pour libérer de l'espace"):
+                    with st.popover("🗑️ Nettoyer les vidéos", width="stretch", help="Déplacer en toute sécurité les vidéos vers la Corbeille Windows pour libérer de l'espace"):
                         st.markdown("#### 🗑️ Déplacer vers la Corbeille")
                         st.markdown("""
                         <div style="font-size: 0.85rem; color: #94a3b8; line-height: 1.45; margin-bottom: 0.8rem;">
@@ -1356,7 +1372,7 @@ def main():
                                     f"🗑️ Mettre {clean_count} vidéo(s) à la Corbeille",
                                     type="primary",
                                     disabled=not chk_confirm_trash,
-                                    use_container_width=True,
+                                    width="stretch",
                                     key="btn_run_recycle_bin"
                                 ):
                                     succ_c, fail_c = send_to_recycle_bin(target_clean)
@@ -1412,12 +1428,12 @@ def main():
                             st.session_state.pop("cached_folder_path", None)
                             st.session_state.pop("cached_folder_stats", None)
                             st.session_state.force_folder_rescan = True
-                        st.button(":material/sync: Traiter un autre dossier", key="btn_folder_done_choose_another", type="primary", use_container_width=True, on_click=on_choose_new_folder)
+                        st.button(":material/sync: Traiter un autre dossier", key="btn_folder_done_choose_another", type="primary", width="stretch", on_click=on_choose_new_folder)
                     with col_done2:
-                        if st.button(":material/folder_open: Ouvrir dans l'Explorateur", key="btn_folder_done_open_dir", use_container_width=True):
+                        if st.button(":material/folder_open: Ouvrir dans l'Explorateur", key="btn_folder_done_open_dir", width="stretch"):
                             open_folder_in_explorer(current_folder)
                 elif total_found > 0:
-                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=(st.session_state.is_processing or not has_any_folder_export), use_container_width=True):
+                    if st.button(":material/rocket_launch: Lancer la transcription du lot", key="btn_launch_batch", type="primary", disabled=(st.session_state.is_processing or not has_any_folder_export), width="stretch"):
                         st.session_state.progress_queue = queue.Queue()
                         st.session_state.stop_event = threading.Event()
                         st.session_state.is_processing = True
@@ -1469,6 +1485,16 @@ def main():
                     st.warning("Aucun fichier vidéo ou audio supporté trouvé dans ce répertoire.")
             elif st.session_state.target_folder:
                 st.error("Le dossier spécifié n'existe pas ou n'est pas accessible.")
+            else:
+                st.markdown("""
+                <div style="background: #11131a; border: 1.5px dashed #27272a; border-radius: 14px; padding: 2.2rem 1.5rem; text-align: center; margin-top: 1.25rem;">
+                    <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
+                    <div style="color: #f8fafc; font-weight: 600; font-size: 1.05rem;">Prêt à scanner un dossier média</div>
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.4rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                        Cliquez sur <b>Parcourir</b> ou collez le chemin d'un dossier pour détecter automatiquement toutes vos vidéos et fichiers audio (MP4, MKV, MP3, WAV, etc.) et les transcrire par lot.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         # --- MODE 2 : FILE D'ATTENTE MULTI-FICHIERS (DRAG & DROP) ---
         else:
@@ -1558,7 +1584,7 @@ def main():
                     else f":material/rocket_launch: Lancer la file d'attente ({len(uploaded_files)} fichiers)"
                 )
                 
-                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=(st.session_state.is_processing or not has_any_queue_export), use_container_width=True):
+                if st.button(btn_label, key="btn_launch_queue", type="primary", disabled=(st.session_state.is_processing or not has_any_queue_export), width="stretch"):
                     saved_paths = [save_uploaded_file(f) for f in uploaded_files]
                     output_dir = PROJECT_ROOT / "output"
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1707,7 +1733,7 @@ def main():
                 
         with col_stop:
             st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
-            if st.button("🛑 Interrompre", type="secondary", use_container_width=True):
+            if st.button("🛑 Interrompre", type="secondary", width="stretch"):
                 st.session_state.stop_event.set()
                 st.session_state.is_processing = False
                 st.warning("Arrêt demandé...")
@@ -1897,7 +1923,7 @@ def main():
                     st.success(":material/celebration: Transcription du dossier terminée avec succès !")
             with col_new_task:
                 new_btn_lbl = ":material/add_circle: Nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
-                st.button(new_btn_lbl, key="btn_reset_batch_top", type="primary", use_container_width=True, on_click=on_reset_batch_action)
+                st.button(new_btn_lbl, key="btn_reset_batch_top", type="primary", width="stretch", on_click=on_reset_batch_action)
             
             col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
@@ -1940,7 +1966,7 @@ def main():
             # --- BARRE D'ACTIONS RAPIDES GLOBALES ---
             col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
             with col_act1:
-                if st.button(":material/folder_open: Ouvrir le dossier", type="secondary", use_container_width=True, key="btn_open_batch_dir"):
+                if st.button(":material/folder_open: Ouvrir le dossier", type="secondary", width="stretch", key="btn_open_batch_dir"):
                     open_folder_in_explorer(dest_dir)
             
             with col_act2:
@@ -1955,18 +1981,18 @@ def main():
                         file_name="transcriptions_lot.zip",
                         mime="application/zip",
                         type="primary",
-                        use_container_width=True,
+                        width="stretch",
                         key="btn_dl_batch_zip"
                     )
                 else:
-                    st.button("📦 Télécharger tout (.zip)", disabled=True, use_container_width=True, key="btn_dl_batch_zip_dis")
+                    st.button("📦 Télécharger tout (.zip)", disabled=True, width="stretch", key="btn_dl_batch_zip_dis")
                     
             with col_act3:
                 all_text_combined = "\n\n".join([
                     f"=== {cf.get('filename')} ===\n{cf.get('text', '')}"
                     for cf in completed_files if cf.get("text")
                 ])
-                if st.button("📋 Copier tout le lot", type="secondary", use_container_width=True, key="btn_copy_all_batch", help="Copier l'ensemble des textes transcrits du lot"):
+                if st.button("📋 Copier tout le lot", type="secondary", width="stretch", key="btn_copy_all_batch", help="Copier l'ensemble des textes transcrits du lot"):
                     if all_text_combined and copy_to_clipboard(all_text_combined):
                         st.toast(f"{len(completed_files)} transcriptions copiées dans le presse-papier !", icon="📋")
                     else:
@@ -2001,11 +2027,11 @@ def main():
                     if total_b_pages > 1:
                         col_bp_prev, col_bp_info, col_bp_next = st.columns([1, 1.5, 1], vertical_alignment="center")
                         with col_bp_prev:
-                            st.button("◀", disabled=(curr_b_page <= 1), use_container_width=True, key="btn_batch_page_prev", on_click=on_batch_prev)
+                            st.button("◀", disabled=(curr_b_page <= 1), width="stretch", key="btn_batch_page_prev", on_click=on_batch_prev)
                         with col_bp_info:
                             st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.82rem;'>Page <b>{curr_b_page}</b> / {total_b_pages}</div>", unsafe_allow_html=True)
                         with col_bp_next:
-                            st.button("▶", disabled=(curr_b_page >= total_b_pages), use_container_width=True, key="btn_batch_page_next", on_click=on_batch_next)
+                            st.button("▶", disabled=(curr_b_page >= total_b_pages), width="stretch", key="btn_batch_page_next", on_click=on_batch_next)
                 
                 for idx, cf in enumerate(page_files, start=b_start + 1):
                     cf_name = cf.get("filename", f"Fichier_{idx}")
@@ -2032,7 +2058,7 @@ def main():
                         # Boutons d'action pour ce fichier
                         col_fa_cp, col_fa_txt, col_fa_srt, col_fa_md = st.columns(4)
                         with col_fa_cp:
-                            if st.button("📋 Copier", key=f"btn_cp_file_{idx}", use_container_width=True):
+                            if st.button("📋 Copier", key=f"btn_cp_file_{idx}", width="stretch"):
                                 if copy_to_clipboard(cf_text):
                                     st.toast(f"'{cf_name}' copié !", icon="📋")
                                 else:
@@ -2045,7 +2071,7 @@ def main():
                                     data=txt_bytes,
                                     file_name=cf_txt_path.name,
                                     mime="text/plain",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key=f"dl_txt_file_{idx}"
                                 )
                         with col_fa_srt:
@@ -2056,7 +2082,7 @@ def main():
                                     data=srt_bytes,
                                     file_name=cf_srt_path.name,
                                     mime="text/plain",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key=f"dl_srt_file_{idx}"
                                 )
                         with col_fa_md:
@@ -2067,7 +2093,7 @@ def main():
                                     data=md_bytes,
                                     file_name=cf_md_path.name,
                                     mime="text/markdown",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key=f"dl_md_file_{idx}"
                                 )
                         
@@ -2090,7 +2116,7 @@ def main():
                             with st.expander(f"🌐 Version Traduite ({cf.get('target_translation', 'Traduction')})", expanded=False):
                                 col_btr_cp, col_btr_txt, col_btr_srt = st.columns([1.5, 1, 1])
                                 with col_btr_cp:
-                                    if st.button("📋 Copier Traduction", key=f"btn_cp_btr_{idx}", use_container_width=True):
+                                    if st.button("📋 Copier Traduction", key=f"btn_cp_btr_{idx}", width="stretch"):
                                         if copy_to_clipboard(tr_text):
                                             st.toast("Traduction copiée !", icon="📋")
                                 with col_btr_txt:
@@ -2101,7 +2127,7 @@ def main():
                                             file_name=tr_txt_p.name,
                                             mime="text/plain",
                                             key=f"dl_btr_txt_{idx}",
-                                            use_container_width=True
+                                            width="stretch"
                                         )
                                 with col_btr_srt:
                                     if tr_srt_p and tr_srt_p.exists():
@@ -2111,7 +2137,7 @@ def main():
                                             file_name=tr_srt_p.name,
                                             mime="text/plain",
                                             key=f"dl_btr_srt_{idx}",
-                                            use_container_width=True
+                                            width="stretch"
                                         )
                                 st.text_area(f"Texte traduit ({cf_name}) :", value=tr_text, height=120, key=f"ta_btr_{idx}", disabled=True)
 
@@ -2119,7 +2145,7 @@ def main():
                         with st.expander(f"✏️ Éditer & Synchroniser ({cf_name})", expanded=False):
                             b_ed_loaded_key = f"batch_ed_loaded_{idx}"
                             if not st.session_state.get(b_ed_loaded_key, False):
-                                if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_batch_ed_{idx}", type="secondary", use_container_width=True):
+                                if st.button("✏️ Charger l'Éditeur Audio-Texte", key=f"btn_load_batch_ed_{idx}", type="secondary", width="stretch"):
                                     st.session_state[b_ed_loaded_key] = True
                                     st.rerun()
                                 st.caption("Charge le lecteur audio synchronisé et la table d'édition.")
@@ -2149,7 +2175,7 @@ def main():
                         with st.expander(f"🤖 Studio IA & Synthèse ({cf_name})", expanded=False):
                             b_ai_loaded_key = f"batch_ai_loaded_{idx}"
                             if not st.session_state.get(b_ai_loaded_key, False):
-                                if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_batch_ai_{idx}", type="secondary", use_container_width=True):
+                                if st.button("🤖 Charger le Studio IA & Synthèse", key=f"btn_load_batch_ai_{idx}", type="secondary", width="stretch"):
                                     st.session_state[b_ai_loaded_key] = True
                                     st.rerun()
                                 st.caption("Détecte et connecte vos modèles locaux Ollama / LM Studio.")
@@ -2160,15 +2186,15 @@ def main():
                     st.markdown("<div style='margin-top: 0.8rem;'></div>", unsafe_allow_html=True)
                     col_bp_bprev, col_bp_binfo, col_bp_bnext = st.columns([1, 2, 1], vertical_alignment="center")
                     with col_bp_bprev:
-                        st.button("◀ Page précédente", disabled=(curr_b_page <= 1), use_container_width=True, key="btn_batch_page_prev_bottom", on_click=on_batch_prev)
+                        st.button("◀ Page précédente", disabled=(curr_b_page <= 1), width="stretch", key="btn_batch_page_prev_bottom", on_click=on_batch_prev)
                     with col_bp_binfo:
                         st.markdown(f"<div style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>Affichage des fichiers <b>{b_start + 1} à {b_end}</b> sur {total_b_count}</div>", unsafe_allow_html=True)
                     with col_bp_bnext:
-                        st.button("Page suivante ▶", disabled=(curr_b_page >= total_b_pages), use_container_width=True, key="btn_batch_page_next_bottom", on_click=on_batch_next)
+                        st.button("Page suivante ▶", disabled=(curr_b_page >= total_b_pages), width="stretch", key="btn_batch_page_next_bottom", on_click=on_batch_next)
 
             st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             reset_label = ":material/sync: Traiter une nouvelle file d'attente" if is_queue else ":material/sync: Traiter un autre dossier"
-            st.button(reset_label, use_container_width=True, key="btn_reset_batch", on_click=on_reset_batch_action)
+            st.button(reset_label, width="stretch", key="btn_reset_batch", on_click=on_reset_batch_action)
         else:
             def on_reset_single_action():
                 st.session_state.transcription_done = False
@@ -2181,7 +2207,7 @@ def main():
             with col_succ_s:
                 st.success(":material/celebration: Transcription terminée avec succès !")
             with col_new_s:
-                st.button(":material/sync: Transcrire un autre fichier", key="btn_reset_single_top", type="primary", use_container_width=True, on_click=on_reset_single_action)
+                st.button(":material/sync: Transcrire un autre fichier", key="btn_reset_single_top", type="primary", width="stretch", on_click=on_reset_single_action)
             file_path = st.session_state.current_file
             out_dir = st.session_state.output_dir
             base_name = file_path.stem
@@ -2285,7 +2311,7 @@ def main():
             # Barre d'actions rapides (Copie & Téléchargement immédiat)
             col_act_cp, col_act_dl = st.columns([1, 1])
             with col_act_cp:
-                if st.button("📋 Copier dans le presse-papier", type="primary", use_container_width=True, key="btn_copy_quick_main", help="Copier l'intégralité du texte transcrit en un seul clic"):
+                if st.button("📋 Copier dans le presse-papier", type="primary", width="stretch", key="btn_copy_quick_main", help="Copier l'intégralité du texte transcrit en un seul clic"):
                     if copy_to_clipboard(txt_text):
                         st.toast("Transcription copiée dans le presse-papier !", icon="📋")
                     else:
@@ -2296,7 +2322,7 @@ def main():
                     data=txt_text,
                     file_name=f"{base_name}.txt",
                     mime="text/plain",
-                    use_container_width=True,
+                    width="stretch",
                     key="btn_dl_quick_main"
                 )
             
@@ -2344,11 +2370,11 @@ def main():
                         data=active_txt,
                         file_name=f"{base_name}.txt",
                         mime="text/plain",
-                        use_container_width=True,
+                        width="stretch",
                         key="dl_btn_tab_txt"
                     )
                 with col_t_cp:
-                    if st.button("📋 Copier le texte brut", key="btn_copy_tab_txt", use_container_width=True):
+                    if st.button("📋 Copier le texte brut", key="btn_copy_tab_txt", width="stretch"):
                         if copy_to_clipboard(active_txt):
                             st.toast("Texte brut copié dans le presse-papier !", icon="📋")
                 st.text_area("Transcription brute :", value=active_txt, height=350)
@@ -2381,11 +2407,11 @@ def main():
                         data=active_md,
                         file_name=f"{base_name}.md",
                         mime="text/markdown",
-                        use_container_width=True,
+                        width="stretch",
                         key="dl_btn_tab_md"
                     )
                 with col_m_cp:
-                    if st.button("📋 Copier le Markdown", key="btn_copy_tab_md", use_container_width=True):
+                    if st.button("📋 Copier le Markdown", key="btn_copy_tab_md", width="stretch"):
                         if copy_to_clipboard(active_md):
                             st.toast("Markdown copié dans le presse-papier !", icon="📋")
                 st.markdown(active_md)
@@ -2398,11 +2424,11 @@ def main():
                         data=srt_text,
                         file_name=f"{base_name}.srt",
                         mime="text/plain",
-                        use_container_width=True,
+                        width="stretch",
                         key="dl_btn_tab_srt"
                     )
                 with col_s_cp:
-                    if st.button("📋 Copier les sous-titres", key="btn_copy_tab_srt", use_container_width=True):
+                    if st.button("📋 Copier les sous-titres", key="btn_copy_tab_srt", width="stretch"):
                         if copy_to_clipboard(srt_text):
                             st.toast("Sous-titres copiés dans le presse-papier !", icon="📋")
                 st.code(srt_text, language="text")
@@ -2441,7 +2467,7 @@ def main():
                         chosen_tgt_code = trans_lang_list[trans_labels.index(chosen_tgt_label)]
                     with col_tr_btn:
                         st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
-                        launch_translation = st.button("🌐 Traduire", type="primary", use_container_width=True, key="btn_run_translation")
+                        launch_translation = st.button("🌐 Traduire", type="primary", width="stretch", key="btn_run_translation")
                         
                     state_tr_key = f"trans_result_{base_name}_{chosen_tgt_code}"
                     
@@ -2486,7 +2512,7 @@ def main():
                         st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
                         col_t_act_cp, col_t_act_txt, col_t_act_srt, col_t_act_md = st.columns(4)
                         with col_t_act_cp:
-                            if st.button("📋 Copier la traduction", key=f"btn_cp_tr_{chosen_tgt_code}", use_container_width=True):
+                            if st.button("📋 Copier la traduction", key=f"btn_cp_tr_{chosen_tgt_code}", width="stretch"):
                                 if copy_to_clipboard(res_txt):
                                     st.toast("Traduction copiée dans le presse-papier !", icon="📋")
                                 else:
@@ -2497,7 +2523,7 @@ def main():
                                 data=res_txt,
                                 file_name=f"{base_name}_{chosen_tgt_code}.txt",
                                 mime="text/plain",
-                                use_container_width=True,
+                                width="stretch",
                                 key=f"dl_tr_txt_{chosen_tgt_code}"
                             )
                         with col_t_act_srt:
@@ -2507,7 +2533,7 @@ def main():
                                     data=res_srt,
                                     file_name=f"{base_name}_{chosen_tgt_code}.srt",
                                     mime="text/plain",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key=f"dl_tr_srt_{chosen_tgt_code}"
                                 )
                             else:
@@ -2519,7 +2545,7 @@ def main():
                                     data=res_md,
                                     file_name=f"{base_name}_{chosen_tgt_code}.md",
                                     mime="text/markdown",
-                                    use_container_width=True,
+                                    width="stretch",
                                     key=f"dl_tr_md_{chosen_tgt_code}"
                                 )
                                 
@@ -2544,7 +2570,7 @@ def main():
                 render_llm_templates(transcription_text=txt_text, key_prefix=f"single_{base_name}")
                 
             st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid rgba(46, 116, 253, 0.15);'>", unsafe_allow_html=True)
-            st.button(":material/sync: Nouvelle transcription", use_container_width=True, on_click=on_reset_single_action)
+            st.button(":material/sync: Nouvelle transcription", width="stretch", on_click=on_reset_single_action)
 
 if __name__ == "__main__":
     main()

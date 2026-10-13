@@ -21,7 +21,7 @@ class TestVersionModule(unittest.TestCase):
 
     def test_metadata_constants(self):
         """Vérifie la validité des métadonnées du projet."""
-        self.assertEqual(__version__, "2.5.0")
+        self.assertEqual(__version__, "2.6.0")
         self.assertEqual(__author__, "Lyes Harrar")
         self.assertIn("LyesHarrar/LocalScribe", __github_repo__)
         self.assertEqual(__github_author__, "https://github.com/LyesHarrar")
@@ -37,11 +37,11 @@ class TestVersionModule(unittest.TestCase):
 
     def test_compare_versions(self):
         """Vérifie la logique de comparaison de versions."""
-        self.assertEqual(compare_versions("v2.5.0", "v2.4.0"), 1)
-        self.assertEqual(compare_versions("v2.4.0", "v2.4.0"), 0)
-        self.assertEqual(compare_versions("2.4.0", "v2.4.0"), 0)
-        self.assertEqual(compare_versions("v2.3.9", "v2.4.0"), -1)
-        self.assertEqual(compare_versions("v2.4.2", "v2.4.0"), 1)
+        self.assertEqual(compare_versions("v2.6.0", "v2.5.0"), 1)
+        self.assertEqual(compare_versions("v2.5.0", "v2.5.0"), 0)
+        self.assertEqual(compare_versions("2.5.0", "v2.5.0"), 0)
+        self.assertEqual(compare_versions("v2.4.9", "v2.5.0"), -1)
+        self.assertEqual(compare_versions("v2.6.1", "v2.6.0"), 1)
 
     @patch("urllib.request.urlopen")
     def test_check_for_updates_update_available(self, mock_urlopen):

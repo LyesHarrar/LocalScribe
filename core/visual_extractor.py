@@ -335,6 +335,8 @@ def extract_keyframe_image(
     cmd = [
         exe,
         "-y",
+        "-nostats",
+        "-loglevel", "error",
         "-ss", ts_formatted,
         "-i", str(v_path),
         "-vframes", "1",

@@ -1338,6 +1338,65 @@ class TestTranscriptionEngine(unittest.TestCase):
             statuses2 = [m.get("status") for m in msgs2]
             self.assertIn("file_skipped", statuses2)
 
+    def test_whisper_model_cache_lifecycle(self):
+        """Vérifie le cycle de vie du cache WhisperModel et la libération mémoire."""
+        from core.transcription_engine import get_cached_whisper_model, clear_whisper_model_cache, _MODEL_CACHE
+        
+        clear_whisper_model_cache()
+        self.assertEqual(len(_MODEL_CACHE), 0)
+
+        # Simulation d'un appel avec WhisperModel simulé
+        class FakeWhisper:
+            def __init__(self, name, device, compute_type, download_root):
+                self.name = name
+                self.device = device
+                self.compute_type = compute_type
+                self.download_root = download_root
+
+        with patch("core.transcription_engine.WhisperModel", FakeWhisper):
+            # Premier appel : instanciation et mise en cache
+            m1 = get_cached_whisper_model("small", "cpu", "int8", "/tmp/models")
+            self.assertIsInstance(m1, FakeWhisper)
+            self.assertEqual(len(_MODEL_CACHE), 1)
+
+            # Deuxième appel avec mêmes paramètres : réutilisation depuis le cache
+            m2 = get_cached_whisper_model("small", "cpu", "int8", "/tmp/models")
+            self.assertIs(m1, m2)
+
+            # Troisième appel avec paramètres différents : remplacement dans le cache
+            m3 = get_cached_whisper_model("medium", "cpu", "int8", "/tmp/models")
+            self.assertIsNot(m1, m3)
+            self.assertEqual(len(_MODEL_CACHE), 1)
+            self.assertEqual(list(_MODEL_CACHE.keys())[0], ("medium", "cpu", "int8"))
+
+        # Nettoyage
+        clear_whisper_model_cache()
+        self.assertEqual(len(_MODEL_CACHE), 0)
+
+    def test_safe_atomic_replace_resilience(self):
+        """Vérifie le remplacement atomique et résilient de fichiers, y compris avec caractères Unicode."""
+        from core.transcription_engine import safe_atomic_replace
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            tmp_src = tmp_root / "document_temporaire_accentué.tmp"
+            target_dst = tmp_root / "document_définitif_accentué_🚀.txt"
+
+            # 1. Remplacement initial (création du fichier cible)
+            tmp_src.write_text("Contenu initial de test", encoding="utf-8")
+            safe_atomic_replace(tmp_src, target_dst)
+
+            self.assertFalse(tmp_src.exists())
+            self.assertTrue(target_dst.exists())
+            self.assertEqual(target_dst.read_text(encoding="utf-8"), "Contenu initial de test")
+
+            # 2. Remplacement par écrasement atomique d'un fichier existant
+            tmp_src.write_text("Nouveau contenu écrasé", encoding="utf-8")
+            safe_atomic_replace(tmp_src, target_dst)
+
+            self.assertFalse(tmp_src.exists())
+            self.assertTrue(target_dst.exists())
+            self.assertEqual(target_dst.read_text(encoding="utf-8"), "Nouveau contenu écrasé")
+
 
 if __name__ == "__main__":
     unittest.main()
