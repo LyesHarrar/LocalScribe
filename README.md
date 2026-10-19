@@ -16,9 +16,11 @@
   <br/>
 
   <p align="center">
-    <a href="https://github.com/LyesHarrar/LocalScribe/releases/latest">
+    <a href="https://github.com/LyesHarrar/LocalScribe/releases/latest/download/LocalScribe-v2.6.1-Portable-Windows-x64.zip">
       <img src="https://img.shields.io/badge/⬇️_TÉLÉCHARGER_POUR_WINDOWS-(Version_Portable_Prête_à_l'Emploi)-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger LocalScribe pour Windows" height="42" />
     </a>
+    <br/>
+    <small><a href="https://github.com/LyesHarrar/LocalScribe/releases/latest">📦 Consulter les notes de version v2.6.1 sur GitHub</a></small>
   </p>
 
   <p align="center">
@@ -309,10 +311,9 @@ LocalScribe/
 
 > **Zéro Python, Zéro terminal, Zéro configuration.** Double-cliquez et c'est parti.
 
-1. Allez dans **[⬇️ GitHub Releases](https://github.com/LyesHarrar/LocalScribe/releases/latest)**
-2. Téléchargez **`LocalScribe-v2.6.1-Portable-Windows-x64.zip`** (~900 Mo)
-3. Dézippez sur votre Bureau ou une clé USB
-4. Double-cliquez sur **`LocalScribe.exe`** — l'interface s'ouvre automatiquement
+1. Téléchargez directement l'archive : **[⬇️ LocalScribe-v2.6.1-Portable-Windows-x64.zip (892 Mo)](https://github.com/LyesHarrar/LocalScribe/releases/latest/download/LocalScribe-v2.6.1-Portable-Windows-x64.zip)** *(ou consultez la [page Releases](https://github.com/LyesHarrar/LocalScribe/releases/latest))*.
+2. Dézippez le dossier sur votre Bureau ou une clé USB.
+3. Double-cliquez sur **`LocalScribe.exe`** — l'application démarre directement.
 
 > [!NOTE]
 > Lors du premier lancement, Windows Defender SmartScreen peut afficher un avertissement car l'exécutable n'est pas encore signé par un certificat EV. Cliquez sur "Informations complémentaires" → "Exécuter quand même". Le code source est entièrement auditable ici sur GitHub.
