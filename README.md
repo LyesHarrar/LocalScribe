@@ -13,19 +13,25 @@
   [![Hardware](https://img.shields.io/badge/Engine-NVIDIA%20CUDA%20%7C%20CPU%20int8-7c3aed.svg?style=for-the-badge)](https://github.com/LyesHarrar/LocalScribe)
   [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg?style=for-the-badge)](LICENSE)
 
-  <br/>
+  <br/><br/>
+
+  <p align="center">
+    <a href="https://github.com/LyesHarrar/LocalScribe/releases/latest">
+      <img src="https://img.shields.io/badge/⬇️_TÉLÉCHARGER_POUR_WINDOWS-(Version_Portable_Prête_à_l'Emploi)-2563eb?style=for-the-badge&logo=windows&logoColor=white" alt="Télécharger LocalScribe pour Windows" height="38" />
+    </a>
+  </p>
 
   <p align="center">
     <b>LocalScribe</b> transforme vos enregistrements audio et vidéo en textes structurés, sous-titres horodatés et traductions multilingues, <b>directement sur votre machine</b>, sans aucun appel réseau, sans abonnement SaaS et sans aucune ligne de commande pour l'utilisateur final.
   </p>
 
   <p align="center">
+    <a href="#-démarrage-rapide">Téléchargement & Installation</a> •
     <a href="#-pourquoi-localscribe--vision-produit">Pourquoi LocalScribe ?</a> •
     <a href="#-galerie--aper%C3%A7u-du-produit">Aperçu Visuel</a> •
     <a href="#-fonctionnalit%C3%A9s-cl%C3%A9s">Fonctionnalités</a> •
     <a href="#-d%C3%A9marche-product-builder--ux-craft">Démarche Product</a> •
-    <a href="#%EF%B8%8F-architecture-technique--stack">Architecture & Stack</a> •
-    <a href="#-d%C3%A9marrage-rapide">Démarrage Rapide</a>
+    <a href="#%EF%B8%8F-architecture-technique--stack">Architecture & Stack</a>
   </p>
 
 </div>
@@ -181,10 +187,10 @@ Le projet a été développé selon les principes stricts définis dans le docum
 1. **La Réalité Prime sur la Théorie (Empirical Verification) :**
    Aucune fonctionnalité n'est considérée comme achevée sans validation par des tests unitaires automatisés.
 2. **Couverture de Tests Maximale :**
-   **181 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
+   **188 tests unitaires et d'intégration** couvrent l'intégralité du cycle de vie :
    ```bash
    python -m unittest discover -s tests -p "test_*.py"
-   # Ran 181 tests — OK
+   # Ran 188 tests — OK
    ```
 3. **Écritures Disque Atomiques :**
    Toute génération de transcription utilise le pattern d'écriture temporaire `.tmp` suivi d'un renommage atomique, garantissant qu'aucun fichier ne soit corrompu en cas de fermeture inopinée.
@@ -195,9 +201,9 @@ Le projet a été développé selon les principes stricts définis dans le docum
 
 ### Option A : Version Portable Autonome (Recommandée — Tout Public)
 *Aucune installation de Python requise.*
-1. Rendez-vous dans la section **[Releases](https://github.com/LyesHarrar/LocalScribe/releases)**.
-2. Téléchargez l'archive `LocalScribe-Portable-v2.5.0.zip`.
-3. Dézippez le dossier et double-cliquez sur **`LocalScribe.exe`**.
+1. Rendez-vous dans la section **[Releases GitHub](https://github.com/LyesHarrar/LocalScribe/releases/latest)**.
+2. Téléchargez l'archive **`LocalScribe-v2.6.1-Portable-Windows-x64.zip`**.
+3. Dézippez le dossier (ex: sur votre Bureau ou une clé USB) et double-cliquez sur **`LocalScribe.exe`**.
 
 ### Option B : Environnement Développeur
 
