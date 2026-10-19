@@ -132,6 +132,22 @@ def render_badge(text: str, color: str = "#60a5fa", bg: str = "rgba(46, 116, 253
     parsed_text = re.sub(r':material/([^:]+):', r'<span class="material-symbols-rounded" style="font-family: \'Material Symbols Rounded\' !important; font-size: 1.1em; margin-right: 4px; vertical-align: -0.125em;">\1</span>', text)
     return f"""<span style="background: {bg}; color: {color}; border: 1px solid rgba(46, 116, 253, 0.28); padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; margin-right: 6px;">{parsed_text}</span>"""
 
+def _sync_timestamps(source_key: str):
+    """Synchronise l'option d'horodatage entre la barre latérale, les formulaires de lancement et les options avancées."""
+    val = st.session_state.get(source_key, False)
+    st.session_state["include_timestamps"] = val
+    for k in ("chk_sidebar_timestamps", "chk_folder_timestamps", "chk_queue_timestamps", "chk_adv_timestamps"):
+        if k != source_key:
+            st.session_state[k] = val
+
+def _init_timestamp_state():
+    """Initialise l'état global et les clés de synchronisation pour les horodatages."""
+    if "include_timestamps" not in st.session_state:
+        st.session_state.include_timestamps = False
+    for k in ("chk_sidebar_timestamps", "chk_folder_timestamps", "chk_queue_timestamps", "chk_adv_timestamps"):
+        if k not in st.session_state:
+            st.session_state[k] = st.session_state.include_timestamps
+
 def render_impact_card(est: ImpactEstimate):
     """Affiche une carte dynamique d'estimation de performance et précision sans parsing markdown."""
     if est.speed_score >= 8:
@@ -202,6 +218,7 @@ def render_impact_card(est: ImpactEstimate):
 
 def render_sidebar():
     """Barre latérale épurée avec profils 1-clic, jauge dynamique et options avancées."""
+    _init_timestamp_state()
     with st.sidebar:
         if LOGO_PATH.exists():
             st.image(str(LOGO_PATH), width="stretch")
@@ -237,17 +254,17 @@ def render_sidebar():
         
         preset_options = [
             "⚡ Éclair (Ultra-Rapide)",
-            "⚖️ Équilibré (Recommandé)",
+            "⚖️ Équilibré",
             "🎯 Studio (Haute Précision)",
             "⚙️ Personnalisé"
         ]
         
         if "selected_preset" not in st.session_state:
-            st.session_state.selected_preset = "⚖️ Équilibré (Recommandé)"
-            st.session_state.selected_model = "small"
+            st.session_state.selected_preset = "⚡ Éclair (Ultra-Rapide)"
+            st.session_state.selected_model = "base"
             st.session_state.beam_size = 1
 
-        curr_p_idx = 1
+        curr_p_idx = 0
         for idx, opt in enumerate(preset_options):
             if opt.startswith(st.session_state.selected_preset[:3]):
                 curr_p_idx = idx
@@ -266,7 +283,7 @@ def render_sidebar():
         if "Éclair" in selected_preset:
             st.session_state.selected_model = "base"
             st.session_state.beam_size = 1
-            st.caption("⚡ Base • Beam 1 : Idéal cours, réunions et vidéos longues.")
+            st.caption("⚡ Base • Beam 1 : Vitesse maximale, idéal cours, réunions et contenus longs.")
         elif "Équilibré" in selected_preset:
             st.session_state.selected_model = "small"
             st.session_state.beam_size = 1
@@ -300,11 +317,27 @@ def render_sidebar():
         st.session_state.selected_language = None if selected_lang_code == "auto" else selected_lang_code
 
         # -------------------------------------------------------------
-        # 3. Jauge Interactive en Temps Réel
+        # 3. Horodatages & Marquage de temps (Option visible & directe)
+        # -------------------------------------------------------------
+        st.markdown("<hr style='margin: 0.9rem 0 0.75rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
+        st.markdown("### :material/schedule: Marquage de temps")
+        st.checkbox(
+            "⏱️ Inclure les horodatages [HH:MM:SS]",
+            key="chk_sidebar_timestamps",
+            on_change=lambda: _sync_timestamps("chk_sidebar_timestamps"),
+            help="Ajoute le repère temporel [00:01:23 -> 00:01:30] devant chaque segment dans les transcriptions .txt et .md."
+        )
+        if st.session_state.include_timestamps:
+            st.caption("✅ Horodatages activés dans .txt et .md.")
+        else:
+            st.caption("ℹ️ Texte continu sans horodatages (.srt conserve toujours ses timecodes).")
+
+        # -------------------------------------------------------------
+        # 4. Jauge Interactive en Temps Réel
         # -------------------------------------------------------------
         est = estimate_impact(
             device=profile.device,
-            model_size=st.session_state.get("selected_model", "small"),
+            model_size=st.session_state.get("selected_model", "base"),
             beam_size=st.session_state.get("beam_size", 1),
             preprocess_audio=st.session_state.get("preprocess_audio", False),
             normalize_volume=st.session_state.get("normalize_volume", False),
@@ -315,7 +348,7 @@ def render_sidebar():
         render_impact_card(est)
 
         # -------------------------------------------------------------
-        # 4. Progressive Disclosure (Accordéon Options Avancées)
+        # 5. Progressive Disclosure (Accordéon Options Avancées)
         # -------------------------------------------------------------
         with st.expander("🎛️ Options Spéciales & Avancées", expanded=("Personnalisé" in selected_preset)):
             st.markdown("<div style='font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.6rem;'>Personnalisez vos modèles, filtres acoustiques et traductions.</div>", unsafe_allow_html=True)
@@ -331,8 +364,8 @@ def render_sidebar():
                     "medium": "🎯 medium (~769M params)",
                     "large-v3": "🔬 large-v3 (~1550M params)",
                 }
-                cur_m = st.session_state.get("selected_model", "small")
-                m_idx = model_options.index(cur_m) if cur_m in model_options else 2
+                cur_m = st.session_state.get("selected_model", "base")
+                m_idx = model_options.index(cur_m) if cur_m in model_options else 1
                 chosen_m = st.selectbox(
                     "Taille du modèle Whisper :",
                     options=model_options,
@@ -492,12 +525,12 @@ def render_sidebar():
             # Formatage & Enrichissement Visuel
             st.markdown("<hr style='margin: 0.8rem 0; border: none; border-top: 1px solid #27272a;'>", unsafe_allow_html=True)
             st.markdown("##### ⏱️ Horodatages & Visuels")
-            include_ts = st.checkbox(
+            st.checkbox(
                 "⏱️ Inclure les horodatages dans les textes (.txt / .md)",
-                value=st.session_state.get("include_timestamps", False),
+                key="chk_adv_timestamps",
+                on_change=lambda: _sync_timestamps("chk_adv_timestamps"),
                 help="Ajoute le préfixe [HH:MM:SS -> HH:MM:SS] devant chaque segment dans les fichiers .txt et .md."
             )
-            st.session_state.include_timestamps = include_ts
 
             extract_vis = st.checkbox(
                 "🖼️ Détecter les schémas/visuels clés (Vidéos)",
@@ -1039,6 +1072,7 @@ def render_history_view():
 
 
 def main():
+    _init_timestamp_state()
     st.set_page_config(
         page_title="LocalScribe",
         page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🎙️",
@@ -1085,8 +1119,8 @@ def main():
                - Glissez vos fichiers dans la **File d'attente**, ou
                - Sélectionnez un dossier complet en **Mode Dossier**.
             2. **⚡ Choisissez un profil (Sidebar) :**
-               - **⚡ Éclair :** Ultra-rapide (~11x à 15x temps réel). Idéal cours, réunions et contenus longs.
-               - **⚖️ Équilibré (Recommandé) :** Le compromis idéal vitesse / fidélité orthographique.
+               - **⚡ Éclair (Par défaut) :** Ultra-rapide (~11x à 15x temps réel). Idéal cours, réunions et contenus longs.
+               - **⚖️ Équilibré :** Le compromis idéal vitesse / fidélité orthographique.
                - **🎯 Studio :** Analyse approfondie mot à mot pour les interviews et jargons pointus.
             3. **🚀 Lancez la transcription :**
                - Suivez la vitesse et l'ETA en direct. Une notification Windows vous préviendra dès que c'est prêt !
@@ -1094,6 +1128,7 @@ def main():
             st.divider()
             st.markdown("#### 💡 Boîte à outils incluse :")
             st.markdown("""
+            - **⏱️ Horodatages :** Activez l'inclusion des timecodes [HH:MM:SS] dans vos fichiers .txt et .md en 1 clic.
             - **🗣️ Diarisation :** Identifie et sépare automatiquement qui parle (*Locuteur 1, Locuteur 2*).
             - **🌐 Traduction NLLB-200 :** Traduit vers 24 langues sans aucune connexion Internet.
             - **✏️ Éditeur Karaoké :** Cliquez sur un segment pour réécouter l'audio synchronisé au timecode.
@@ -1402,7 +1437,7 @@ def main():
                             )
 
                 st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
-                st.markdown("##### :material/settings: Options de sortie :")
+                st.markdown("##### :material/settings: Options d'exportation & Formats :")
                 col_opt1, col_opt2, col_opt3, col_opt4 = st.columns([1, 1, 1, 1.4])
                 with col_opt1:
                     folder_export_txt = st.checkbox(":material/description: Texte brut (.txt)", value=True, key="chk_folder_txt")
@@ -1413,6 +1448,18 @@ def main():
                 with col_opt4:
                     folder_export_vis = st.checkbox("📸 Extraire schémas (Vidéo)", value=st.session_state.get("extract_visuals", True), key="chk_folder_visuals", help="Capture automatiquement les slides et schémas montrés à l'écran.")
                     st.session_state.extract_visuals = folder_export_vis
+
+                st.markdown("<div style='margin-top: 0.35rem;'></div>", unsafe_allow_html=True)
+                st.checkbox(
+                    "⏱️ Inclure les horodatages [HH:MM:SS] dans les fichiers texte (.txt / .md)",
+                    key="chk_folder_timestamps",
+                    on_change=lambda: _sync_timestamps("chk_folder_timestamps"),
+                    help="Ajoute le repère temporel [00:01:23 -> 00:01:30] devant chaque segment dans les fichiers .txt et .md générés."
+                )
+                if st.session_state.include_timestamps:
+                    st.caption("✅ Horodatages activés : chaque segment sera préfixé par son intervalle temporel [HH:MM:SS].")
+                else:
+                    st.caption("ℹ️ Texte continu sans marquage temporel (.srt contient toujours les timecodes).")
 
                 has_any_folder_export = folder_export_txt or export_srt or export_md
                 if not has_any_folder_export:
@@ -1572,6 +1619,18 @@ def main():
                         queue_export_srt = st.checkbox("⏱️ Sous-titres (.srt)", value=True, key="chk_q_srt")
                     with col_o3:
                         queue_export_md = st.checkbox(":material/markdown: Markdown (.md)", value=True, key="chk_q_md")
+
+                st.markdown("<div style='margin-top: 0.35rem;'></div>", unsafe_allow_html=True)
+                st.checkbox(
+                    "⏱️ Inclure les horodatages [HH:MM:SS] dans les fichiers texte (.txt / .md)",
+                    key="chk_queue_timestamps",
+                    on_change=lambda: _sync_timestamps("chk_queue_timestamps"),
+                    help="Ajoute le repère temporel [00:01:23 -> 00:01:30] devant chaque segment dans les fichiers .txt et .md générés."
+                )
+                if st.session_state.include_timestamps:
+                    st.caption("✅ Horodatages activés : chaque segment sera préfixé par son intervalle temporel [HH:MM:SS].")
+                else:
+                    st.caption("ℹ️ Texte continu sans marquage temporel (.srt contient toujours les timecodes).")
 
                 has_any_queue_export = queue_export_txt or queue_export_srt or queue_export_md
                 if not has_any_queue_export:
@@ -2256,7 +2315,7 @@ def main():
                 with col_res2:
                     render_metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
-                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "base"), description="faster-whisper local")
                 with col_res4:
                     render_metric_card(label="Locuteurs", value=f"{len(speakers)} voix", description=", ".join(speakers[:2]))
                 with col_res5:
@@ -2268,7 +2327,7 @@ def main():
                 with col_res2:
                     render_metric_card(label="Tâche Réalisée", value=task_type, description=vad_desc)
                 with col_res3:
-                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "medium"), description="faster-whisper local")
+                    render_metric_card(label="Modèle Whisper", value=st.session_state.get("selected_model", "base"), description="faster-whisper local")
                 with col_res4:
                     render_metric_card(label="Temps de calcul", value=el_str, description=speed_desc)
 
