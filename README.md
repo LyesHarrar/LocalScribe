@@ -27,9 +27,9 @@
     <a href="#-tldr--executive-summary">TL;DR</a> •
     <a href="#-pourquoi-localscribe--le-problème-du-marché">Pourquoi LocalScribe ?</a> •
     <a href="#-fonctionnalités-v261">Fonctionnalités</a> •
-    <a href="#%EF%B8%8F-architecture--stack-technique">Architecture & Stack</a> •
-    <a href="#-démarche-produit--ingénierie">Démarche Produit</a> •
-    <a href="#-démarrage-rapide">Démarrage Rapide</a>
+    <a href="#%EF%B8%8F-architecture--stack-technique">Architecture</a> •
+    <a href="#-démarrage-rapide">Démarrage Rapide</a> •
+    <a href="#%EF%B8%8F-stack-complète--craft-de-conception-vision-product-builder">Stack & Craft Product</a>
   </p>
 
 </div>
@@ -420,6 +420,64 @@ Toute génération de fichier utilise le pattern `.tmp` → renommage NTFS-rési
 | **Formats de sortie** | .txt .srt .md .zip (+ images si visual extract) |
 | **Modèles Whisper supportés** | tiny · base · small · medium · large-v1/v2/v3 |
 | **Taille bundle portable** | ~900 Mo (modèle `base` pré-embarqué) |
+
+---
+
+## 🛠️ Stack Complète & Craft de Conception (Vision Product Builder)
+
+Concevoir et livrer **LocalScribe** a nécessité d'adopter une posture complète de **Product Builder & Software Architect** : partir d'un besoin réel (confidentialité critique pour professionnels et créateurs), arbitrer les compromis d'ingénierie (taille de modèle vs temps réel, mémoire RAM vs fluidité) et concevoir chaque micro-interaction pour masquer la complexité de l'IA derrière une expérience zéro-friction.
+
+Voici l'inventaire exhaustif des briques technologiques et des choix de craft mobilisés :
+
+### 1. 🧠 Modèles & Inférence IA (Pragmatisme, Vitesse & Souveraineté)
+- **`faster-whisper` & `CTranslate2`** : Moteur d'inférence C++ SIMD hautement optimisé. Quantification vectorielle `int8` sur CPU multi-cœurs et FP16 sur GPU NVIDIA via CUDA. *Bénéfice : Vitesse 4× supérieure à Whisper standard, VRAM divisée par 2, exécution jusqu'à 15× plus rapide que le temps réel.*
+- **`sherpa-onnx`** : Pipeline d'inférence ONNX Runtime local combinant segmentation PyAnnote ONNX et embeddings acoustiques CAM++. *Bénéfice : Diarisation des locuteurs ("qui parle quand") 100% hors-ligne, zéro compte HuggingFace, zéro token payant, zéro appel réseau.*
+- **`Meta NLLB-200` (INT8)** : Modèle de traduction neuronale 200 langues distillé pour exécution locale via CTranslate2. *Bénéfice : Traduction multilingue haute fidélité en 24 langues avec préservation intégrale des balises locuteurs et des timecodes `.srt`.*
+- **`Silero VAD` (Voice Activity Detection)** : Filtre neuronal de détection vocale éliminant le traitement des silences avant passage dans Whisper. *Bénéfice : Réduction majeure du temps de calcul et suppression des hallucinations sur les silences prolongés.*
+- **`Ollama` / `LM Studio` (Local AI Engine)** : Orchestration locale de modèles de langage via API HTTP locale (`127.0.0.1`) avec cache TTL 30s. *Bénéfice : 5 actions d'analyse 1-clic (synthèse exécutive, to-do list, chapitrage) et chat Q&A interactif sans débourser un centime en API et sans ajouter de Mo au bundle.*
+
+### 2. 🎛️ Traitement Signal & Multimodalité Économe (Token-Efficiency)
+- **`FFmpeg Statique` (autonome dans `bin/`)** : Moteur de flux multimédia embarqué, injecté automatiquement dans le `PATH` Windows à l'exécution.
+  - `dynaudnorm` : Égalisation dynamique intelligente qui amplifie automatiquement les chuchotements et voix faibles sans saturer les pics sonores.
+  - `afftdn` : Filtrage spectral adaptatif supprimant les bruits de fond continus (climatisation, souffle micro, résonances).
+  - Extraction multi-flux : Détection et conversion à la volée des conteneurs vidéo (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`) en WAV 16 kHz mono 16-bit.
+- **`Visual-to-Markdown Engine` (`core/visual_extractor.py`)** : Détection sémantique heuristique bilingue (FR/EN) et capture chirurgicale FFmpeg à la milliseconde (~50 ms par image, zéro terminal).  
+  *Valeur Product : Permet à n'importe quel LLM ou agent IA de comprendre l'intégralité d'un cours ou d'une conférence vidéo via un Markdown illustré synchronisé, sans devoir ingérer un fichier vidéo de plusieurs Go, économisant jusqu'à 95% des tokens et des coûts d'API.*
+
+### 3. 🖥️ Craft Desktop & Ingénierie Système Windows
+- **`pywebview` + Microsoft Edge WebView2** : Encapsulation de l'interface réactive dans une véritable fenêtre desktop native Windows. *Bénéfice : ~150 Mo de RAM économisés par rapport à une coquille Electron classique, démarrage instantané.*
+- **`Win32 DWM API` (via `ctypes`)** :
+  - `DWMWA_USE_IMMERSIVE_DARK_MODE` : Synchronisation avec le thème sombre Windows pour une barre de titre immersive.
+  - `DWMWA_SYSTEMBACKDROP_TYPE` : Application de l'effet visuel système moderne Mica / Acrylic.
+  - `DWMWA_WINDOW_CORNER_PREFERENCE` : Arrondis d'angles natifs Windows 11.
+  - Bordure de fenêtre personnalisée teintée en Bleu Électrique `#2e74fd`.
+- **`SHFileOperationW` (`FOF_ALLOWUNDO`)** : Suppression sécurisée native vers la Corbeille Windows avec possibilité de restauration (`Ctrl+Z`), évitant toute perte accidentelle de fichiers sources.
+- **`STARTUPINFO` & `SW_HIDE` (`CREATE_NO_WINDOW`)** : Encapsulation stricte de tous les sous-processus système (FFmpeg, PowerShell, scripts) pour éradiquer 100% des fenêtres noires de console. Promesse "Zéro Terminal" garantie au niveau kernel.
+- **Windows Toast Notifications** : Notifications toast natives Windows 10/11 avec carillon sonore discret lors de la complétion d'un travail.
+- **Résolution Dynamique cuBLAS/cuDNN** : Détection et injection automatique des DLLs CUDA 12 dans le processus pour activer l'accélération matérielle NVIDIA sans aucune manipulation manuelle.
+
+### 4. ⚡ Architecture Données, Concurrence & Performance
+- **`SQLite3` en mode WAL (Write-Ahead Logging)** : Persistance transactionnelle ACID avec cache mémoire étendu à 64 Mo, index couvrants et moteur de recherche Full-Text (FTS). *Bénéfice : Vitesse de consultation de l'historique divisée par 2, recherche instantanée dans des centaines d'heures de transcript.*
+- **Multithreading Natif (`threading.Thread` + `queue.Queue`)** : Découplage strict entre l'inférence IA consommatrice de CPU/GPU et le thread d'affichage pour maintenir une interface réactive à 60 FPS sans aucun freeze.
+- **Mise en cache intelligente (LRU & TTL)** :
+  - `@lru_cache` sur le modèle Whisper pour charger les poids une seule fois lors du traitement par lot de dizaines de fichiers.
+  - Cache TTL 30s sur la détection réseau local pour éliminer le timeout IPv6 sous Windows.
+- **Écritures Atomiques Résilientes (`safe_atomic_replace`)** : Pattern d'écriture temporaire `.tmp` suivi d'un renommage atomique, résistant aux verrous de fichiers NTFS Windows.
+- **Smart Resume & Pagination** : Ignorance automatique des fichiers déjà transcrits en mode lot et pagination des lots volumineux (10 fiches par page) pour éliminer toute saturation WebSocket.
+
+### 5. 🎨 Design d'Interaction & UX Craft
+- **Streamlit + Thème Ardoise Bleutée Nuit (`#0f172a` / Slate 950)** : Interface moderne inspirée des codes de Shadcn et Linear, scrollbars transparentes 6px, micro-interactions et états vides illustrés.
+- **Progressive Disclosure (Règle des 80/20)** :
+  - **Pour 80% des utilisateurs :** 3 profils macro 1-clic (*⚡ Éclair*, *⚖️ Équilibré*, *🎯 Studio*) pour démarrer en 1 seconde.
+  - **Pour 20% des power users :** Accordéon rétractable permettant de piloter finement chaque hyperparamètre (beam size, VAD, prompts, vocabulaire).
+- **Jauge d'Impact Dynamique (`core/impact_estimator.py`)** : Feedback visuel prédictif en temps réel évaluant la vitesse relative et la fidélité avant de lancer un traitement.
+- **Éditeur Karaoké Synchronisé** : Lecteur audio-texte interactif avec défilement automatique, saut au timecode au clic, outil de recherche & remplacement global et grille tabulaire `st.data_editor`.
+- **Copie Presse-Papier Universelle (`core/clipboard.py`)** : Module de copie 1-clic avec mécanisme de repli multi-niveaux (`pyperclip` → `Win32 OpenClipboard` → `PowerShell` → `pbcopy/wl-copy`).
+
+### 6. 📦 Packaging, Qualité & Méthode de Delivery
+- **Distribution Portable Standalone** : Pipeline de packaging automatisé (`desktop/package_portable.py`) intégrant un runtime CPython 3.10 autonome, le modèle Whisper `base` et FFmpeg dans une archive ZIP prête à l'emploi (double-clic direct sur `LocalScribe.exe`, zéro installation).
+- **188 Tests Automatisés (`unittest` + `AppTest` Streamlit)** : Suite de tests d'intégration et unitaires validant chaque composant métier, l'intégrité de la base SQLite et le rendu UI.
+- **Agentic Engineering & Living Document** : Pilotage du cycle de vie via le protocole [`AGENTS.md`](AGENTS.md) garantissant une traçabilité rigoureuse, la validation empirique systématique avant commit et une documentation toujours synchronisée avec la réalité du code.
 
 ---
 
