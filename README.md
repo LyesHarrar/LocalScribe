@@ -91,7 +91,7 @@ C'est un produit de bureau souverain, autonome et packagé "Zéro Terminal", qui
 - **Détection sémantique des moments visuels :** Analyse heuristique bilingue (FR/EN) et IA locale pour identifier les moments où l'orateur présente un tableau, schéma, méthode, architecture ou slide.
 - **Capture chirurgicale FFmpeg :** Extraction à la milliseconde exacte (~50ms par capture, zéro terminal) avec renommage sémantique automatique (`schema-architecture.png`).
 - **Markdown enrichi & Galerie dédiée :** Onglet interactif avec galerie visuelle, transcription `.md` intégrant les captures d'écran, et archive ZIP globale embarquant les images.
-- **Contrôle d'horodatages [HH:MM:SS] :** Toggles interactifs dans les onglets `.txt` et `.md` pour afficher ou masquer instantanément les timestamps avec adaptation dynamique des boutons de copie et de téléchargement.
+- **Contrôle d'horodatages [HH:MM:SS] :** Option claire et directement visible en 1 clic (barre latérale, formulaires de lancement Mode Dossier et File d'attente) pour inclure ou omettre les repères temporels dans les textes `.txt` et `.md`, complétée par des toggles interactifs dans l'onglet des résultats.
 
 ### 🗄️ Historique Persistant SQLite & Exports 1-Clic
 - **Base de données locale :** Historisation automatique de chaque transcription avec métriques de confiance et horodatages.
@@ -116,7 +116,7 @@ flowchart LR
 
 ### 1. Progressive Disclosure (Conception pour les 80 / 20)
 * **Pour 80% des utilisateurs (Non-techniciens) :** Présentation de **3 profils macro 1-clic** simplifiés :
-  - **⚡ Profil Éclair :** Vitesse maximale (Beam 1, int8, VAD activé). Idéal cours, réunions et podcasts.
+  - **⚡ Profil Éclair (Sélectionné par défaut) :** Vitesse maximale (Beam 1, int8, VAD activé). Idéal cours, réunions et podcasts.
   - **⚖️ Profil Équilibré :** Le compromis idéal rapidité / précision pour les formats standards.
   - **🎯 Profil Studio :** Précision maximale (Beam 5, normalisation Auto-Gain, diarisation).
 * **Pour 20% des utilisateurs (Power Users) :** Accordéon rétractable permettant de débrayer chaque paramètre fin (taille de faisceau, seuil VAD, prompts personnalisés, modèles de `tiny` à `large-v3`).
