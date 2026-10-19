@@ -434,6 +434,6 @@ Toute génération de fichier utilise le pattern `.tmp` → renommage NTFS-rési
 
 <div align="center">
 
-Fait avec 🖤 par **Lyes Harrar** (et 🪐 **Antigravity**) · Licence MIT
+Fait avec amour et <img src="assets/antigravity-logo.png" alt="Antigravity" width="16" height="16" style="vertical-align: -2px;" /> **Antigravity** par **Lyes Harrar** · Licence MIT
 
 </div>
