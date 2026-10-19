@@ -38,26 +38,38 @@
 
 ## ⚡ TL;DR — Executive Summary
 
-> **LocalScribe** est une application de bureau Windows complète qui transforme n'importe quel fichier audio ou vidéo en transcription structurée, sous-titres et traduction, **entièrement sur votre machine**, sans Internet, sans abonnement, sans jamais envoyer vos données quelque part.
+> **LocalScribe** est une application de bureau Windows complète qui transforme n'importe quel fichier audio ou vidéo en transcription structurée, sous-titres, traduction et synthèses IA, **entièrement sur votre machine**, sans Internet, sans abonnement, et avec une confidentialité absolue.
 
-**Ce que c'est :** Un studio IA de transcription autonome, clé en main, construit sur les moteurs open-source les plus performants du marché (Whisper, CTranslate2, sherpa-onnx, NLLB-200), empaqueté dans une interface desktop moderne (Streamlit + pywebview natif Windows), accessible à tout public sans la moindre ligne de commande.
+**Ce que c'est :** Un studio desktop autonome clé en main, propulsé par les moteurs d'IA open-source les plus performants du marché (Whisper, CTranslate2, sherpa-onnx, NLLB-200), empaqueté dans une interface fluide (Streamlit + pywebview natif Windows), sans aucune ligne de commande pour l'utilisateur final.
 
-**Pourquoi c'est différent des SaaS (Otter.ai, Descript, Whisper API Cloud) :**
+**🌱 Origine du projet :** LocalScribe est l'évolution personnelle et le perfectionnement d'un logiciel d'abord développé et livré sur-mesure pour des clients ayant des contraintes métiers strictes :
+- 🧠 **Psychologues & Thérapeutes :** Transcription sécurisée de consultations et d'entretiens cliniques (secret médical absolu, zéro cloud).
+- 🎬 **Streamers & Créateurs de contenu :** Sous-titrage rapide `.srt`, chapitrage automatique et extraction des punchlines sans abonnement SaaS.
+- ⚖️ **Avocats & Juristes :** Traitement in-situ de dépositions, réunions et enregistrements sensibles conformes au RGPD.
 
-| Critère | ☁️ Solutions SaaS | 🖥️ LocalScribe |
+Cette version open-source est une refonte avancée pensée pour une utilisation poussée de l'IA, introduisant deux fonctionnalités à très forte valeur ajoutée :
+
+1. 📸 **Découpage intelligent des frames & Transcripts (Économie massive de tokens) :**  
+   Faire analyser une vidéo de 1 ou 2 heures par un modèle multimodal cloud (Gemini, GPT-4o, Claude) coûte cher, consomme des millions de tokens et pose des risques de confidentialité. LocalScribe découpe chirurgicalement les **frames clés** (slides, schémas, architectures, tableaux) et les synchronise mot à mot avec la transcription. N'importe quel LLM peut ainsi **comprendre l'intégralité du contexte visuel et textuel d'une vidéo sans avoir à lire le flux vidéo lourd**, économisant jusqu'à 95% des tokens et des coûts d'API.
+2. 🤖 **Studio IA 100% Local (Ollama & LM Studio) :**  
+   Post-traitement automatisé directement sur votre puce : synthèses exécutives, to-do lists d'action, chapitrages thématiques et chat Q&A interactif sur vos enregistrements. Vos transcriptions sont exploitées immédiatement, sans jamais quitter votre machine.
+
+---
+
+### Pourquoi c'est différent des solutions SaaS (Otter.ai, Descript, Whisper Cloud)
+
+| Critère | ☁️ Solutions SaaS Cloud | 🖥️ LocalScribe |
 |:---|:---:|:---:|
-| Confidentialité des données | ❌ Serveurs tiers | ✅ 100% local |
-| Conformité RGPD | ❌ Complexe | ✅ Native |
-| Coût d'usage illimité | ❌ $20–$100/mois | ✅ Gratuit après install |
-| Fonctionne sans Internet | ❌ Non | ✅ 100% offline |
-| Diarisation offline | ❌ Payant / API | ✅ Incluse (sherpa-onnx) |
-| Traduction neuronale offline | ❌ Non | ✅ 24 langues (NLLB-200) |
-| Extraction slides vidéo | ❌ Non | ✅ Incluse (FFmpeg) |
-| Installation terminal / Python | ❌ Souvent | ✅ Zéro terminal |
+| **Confidentialité & RGPD** | ❌ Fichiers sur serveurs tiers | ✅ 100% local, étanche, zéro réseau |
+| **Coût d'usage illimité** | ❌ $20 à $100+ / mois | ✅ Gratuit et illimité à vie |
+| **Fonctionnement hors-ligne** | ❌ Impossible sans connexion | ✅ 100% offline (train, avion, bunker) |
+| **Économie de tokens (Frames + Texte)** | ❌ Doit ingérer la vidéo brute | ✅ Slides extraites + transcript synchro |
+| **Studio IA post-traitement** | ❌ Payant / Quotas stricts | ✅ Inclus via Ollama / LM Studio local |
+| **Diarisation (qui parle quand)** | ❌ Payante ou bridée | ✅ Incluse 100% offline (sherpa-onnx) |
+| **Traduction neuronale** | ❌ Serveurs distants | ✅ 24 langues intégrées (Meta NLLB) |
+| **Installation & Déploiement** | ❌ Variable | ✅ Portable autonome (zéro terminal) |
 
-**Pour qui :** Professionnels de santé, juristes, journalistes, chercheurs, formateurs, entreprises en environnement sécurisé (air-gapped), toute organisation soumise à des contraintes RGPD ou de confidentialité.
-
-**Stack en un coup d'œil :** `faster-whisper` · `CTranslate2` · `sherpa-onnx` · `Meta NLLB-200` · `Streamlit` · `pywebview` · `FFmpeg` · `SQLite WAL` · `PyInstaller` · `Win32 DWM` · 188 tests.
+**Stack en un coup d'œil :** `faster-whisper` · `CTranslate2` · `sherpa-onnx` · `Meta NLLB-200` · `Streamlit` · `pywebview` · `FFmpeg` · `SQLite WAL` · `Ollama / LM Studio` · 188 tests.
 
 ---
 
@@ -161,6 +173,7 @@ flowchart LR
 - **IA locale optionnelle :** Détection renforcée via Ollama / LM Studio si disponible.
 - **Capture FFmpeg à la milliseconde :** ~50 ms par extraction, zéro terminal, renommage sémantique automatique (`schema-architecture-systeme.png`).
 - **Markdown enrichi :** Transcription `.md` avec images intégrées aux bons timecodes.
+- **Compréhension Multimodale & Économie de Tokens :** Permet à n'importe quel LLM ou agent IA d'analyser l'intégralité d'une conférence ou d'un cours vidéo via le Markdown illustré généré, sans avoir à ingérer le flux vidéo lourd, économisant jusqu'à 95% des tokens et coûts d'API.
 - **Galerie interactive :** Onglet dédié avec prévisualisations en grille + archive ZIP images + exports individuels.
 
 ### 🗄️ Historique Persistant & Recherche Plein Texte
@@ -421,8 +434,6 @@ Toute génération de fichier utilise le pattern `.tmp` → renommage NTFS-rési
 
 <div align="center">
 
-Fait avec 🖤 par **[Lyes Harrar](https://github.com/LyesHarrar)** — [GitHub](https://github.com/LyesHarrar/LocalScribe) · MIT License
-
-*"La confidentialité ne devrait pas être un luxe payant."*
+Fait avec 🖤 par **Lyes Harrar** (et 🪐 **Antigravity**) · Licence MIT
 
 </div>
