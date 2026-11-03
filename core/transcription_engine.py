@@ -119,10 +119,11 @@ def safe_atomic_replace(tmp_file: Path, target_file: Path, max_retries: int = 3,
 
 
 
-SUPPORTED_EXTENSIONS: Set[str] = {
-    ".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v",
-    ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"
-}
+from core.audio_preprocessor import (
+    VIDEO_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+    SUPPORTED_EXTENSIONS,
+)
 
 SUPPORTED_LANGUAGES = {
     "auto": "🌐 Détection automatique",

@@ -15,13 +15,19 @@ import functools
 import subprocess
 from pathlib import Path
 from uuid import uuid4
-from typing import Optional, Tuple, Dict, Any, List, Callable
+from typing import Optional, Tuple, Dict, Any, List, Callable, Set
 
 logger = logging.getLogger("LocalScribe.AudioPreprocessor")
 
-VIDEO_EXTENSIONS = {
+VIDEO_EXTENSIONS: Set[str] = {
     ".mp4", ".mkv", ".mov", ".avi", ".webm", ".wmv", ".flv", ".m4v", ".ts", ".mts"
 }
+
+AUDIO_EXTENSIONS: Set[str] = {
+    ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma", ".opus"
+}
+
+SUPPORTED_EXTENSIONS: Set[str] = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
 
 def get_silent_windows_subprocess_kwargs() -> dict:

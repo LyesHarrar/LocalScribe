@@ -14,7 +14,8 @@ from core.audio_preprocessor import (
     is_video_file,
     build_audio_filter_string,
     preprocess_audio,
-    cleanup_preprocessed_file
+    cleanup_preprocessed_file,
+    SUPPORTED_EXTENSIONS
 )
 
 
@@ -33,6 +34,12 @@ class TestAudioPreprocessor(unittest.TestCase):
         self.assertTrue(is_video_file(Path("conference.MKV")))
         self.assertTrue(is_video_file(Path("clip.avi")))
         self.assertTrue(is_video_file(Path("web.webm")))
+        self.assertTrue(is_video_file(Path("cours.ts")))
+        self.assertTrue(is_video_file(Path("capture.TS")))
+        self.assertTrue(is_video_file(Path("enregistrement.mts")))
+
+        self.assertIn(".ts", SUPPORTED_EXTENSIONS)
+        self.assertIn(".mts", SUPPORTED_EXTENSIONS)
 
         self.assertFalse(is_video_file(Path("podcast.mp3")))
         self.assertFalse(is_video_file(Path("interview.wav")))

@@ -162,6 +162,56 @@ class TestTranscriptionEngine(unittest.TestCase):
             self.assertIn("Batch text transcription", txt2.read_text(encoding="utf-8"))
 
     @patch("core.transcription_engine.WhisperModel")
+    def test_transcribe_batch_discovers_ts_files(self, mock_whisper_class):
+        """Vérifie que les fichiers vidéo en format .ts et .mts sont bien découverts et transcrits en mode lot."""
+        mock_model = MagicMock()
+        mock_whisper_class.return_value = mock_model
+        
+        class DummyInfo:
+            duration = 10.0
+            language = "fr"
+
+        class DummySegment:
+            id = 1
+            start = 0.0
+            end = 10.0
+            text = "Transcription fichier TS valide"
+            
+        mock_model.transcribe.return_value = ([DummySegment()], DummyInfo())
+        
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            ts_file = root / "cours_en_direct.ts"
+            mts_file = root / "camcorder.mts"
+            ts_file.write_bytes(b"dummy ts video content")
+            mts_file.write_bytes(b"dummy mts video content")
+            
+            q = queue.Queue()
+            stop_event = threading.Event()
+            profile = HardwareProfile("cpu", "int8", "small")
+            
+            transcribe_batch_threaded(
+                target_dir=root,
+                profile=profile,
+                progress_queue=q,
+                stop_event=stop_event
+            )
+            
+            messages = []
+            while not q.empty():
+                messages.append(q.get())
+                
+            discovered = [m for m in messages if m.get("status") == "batch_discovered"]
+            self.assertTrue(len(discovered) > 0, "Le statut batch_discovered doit être émis")
+            self.assertEqual(discovered[0]["total_files"], 2, "Les 2 fichiers .ts et .mts doivent être détectés")
+            
+            txt_ts = root / "cours_en_direct.txt"
+            txt_mts = root / "camcorder.txt"
+            self.assertTrue(txt_ts.exists(), "cours_en_direct.txt doit être généré")
+            self.assertTrue(txt_mts.exists(), "camcorder.txt doit être généré")
+            self.assertIn("Transcription fichier TS valide", txt_ts.read_text(encoding="utf-8"))
+
+    @patch("core.transcription_engine.WhisperModel")
     def test_transcribe_batch_smart_resume(self, mock_whisper_class):
         mock_model = MagicMock()
         mock_whisper_class.return_value = mock_model

@@ -1538,7 +1538,7 @@ def main():
                     <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
                     <div style="color: #f8fafc; font-weight: 600; font-size: 1.05rem;">Prêt à scanner un dossier média</div>
                     <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.4rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
-                        Cliquez sur <b>Parcourir</b> ou collez le chemin d'un dossier pour détecter automatiquement toutes vos vidéos et fichiers audio (MP4, MKV, MP3, WAV, etc.) et les transcrire par lot.
+                        Cliquez sur <b>Parcourir</b> ou collez le chemin d'un dossier pour détecter automatiquement toutes vos vidéos et fichiers audio (MP4, MKV, TS, MP3, WAV, etc.) et les transcrire par lot.
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1556,9 +1556,10 @@ def main():
             </div>
             """, unsafe_allow_html=True)
 
+            supported_upload_types = sorted([ext.lstrip(".") for ext in SUPPORTED_EXTENSIONS])
             uploaded_files = st.file_uploader(
                 "Glissez-déposez vos fichiers ici (sélection multiple supportée) :",
-                type=["mp3", "wav", "m4a", "ogg", "flac", "mp4", "mkv", "mov", "avi", "webm"],
+                type=supported_upload_types,
                 accept_multiple_files=True,
                 key=f"queue_uploader_{st.session_state.get('uploader_key_version', 0)}"
             )

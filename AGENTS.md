@@ -80,9 +80,10 @@ Pour chaque phase de développement (définies dans le `tech_spec.md`), je suivr
 - [x] **Version 2.6.0 — Optimisations Maximales, Moteur Haute Performance & Craft UI/UX** : *Implémentée et validée (SQLite mode WAL + cache 64 Mo + index couvrants divisant le temps d'accès DB par 2, mise en cache LRU en mémoire du modèle Whisper éliminant le rechargement de plusieurs Go entre fichiers, accélération de l'extraction audio FFmpeg avec flags haute performance, migration moderne Streamlit width='stretch' éradiquant 100% des avertissements de dépréciation, états vides illustrés et micro-interactions interactives raffinées, safe_atomic_replace résilient aux verrous NTFS Windows, 183/183 tests au vert).*
 - [x] **Harmonisation Thème Ardoise Bleutée Nuit (#0f172a / Slate 950)** : *Implémentée et validée (fond principal #0f172a et fond secondaire #0b1120 dans .streamlit/config.toml, adaptation des règles CSS globales .stApp et sidebar #0b1120 avec bordures Slate #1e293b dans styles.py, synchronisation de la couleur de titre DWM 0x002A170F et du background webview natif dans run_app.py, fond du lecteur audio synchronisé dans editor_component.py, 183/183 tests au vert).*
 - [x] **Release v2.6.1 — Visibilité Accrue des Horodatages & Profil Éclair par Défaut** : *Implémentée et validée (profil '⚡ Éclair (Ultra-Rapide)' activé par défaut au lancement avec modèle 'base' et beam 1, section dédiée 'Marquage de temps' directement visible dans la barre latérale sans accordéon rétractable, option d'horodatage [HH:MM:SS] intégrée directement dans les formulaires de sortie Mode Dossier et File d'attente, synchronisation multi-composants bidirectionnelle _sync_timestamps, incrément de version v2.6.1, mise à jour du Guide Express et documentation, 188/188 tests au vert).*
+- [x] **Support Universel des Conteneurs Vidéo .TS & .MTS** : *Implémenté et validé (inclusion de .ts, .mts, .wmv, .flv dans SUPPORTED_EXTENSIONS centralisé, déverrouillage de la dropzone drag & drop st.file_uploader, scan récursif en Mode Dossier et file d'attente, gestion MIME video/mp2t dans l'éditeur interactif, 190/190 tests au vert).*
 
 ---
-*Dernière mise à jour par l'Agent : Release v2.6.1 validée avec 188/188 tests au vert.*
+*Dernière mise à jour par l'Agent : Support des vidéos .TS/.MTS validé avec 190/190 tests au vert.*
 
 
 

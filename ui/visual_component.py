@@ -52,7 +52,7 @@ def render_visual_tab(
             </div>
             <div style="color: #a1a1aa; font-size: 0.82rem; margin-top: 0.4rem; line-height: 1.45;">
                 Le fichier <code>{file_path.name}</code> est un fichier audio sans flux d'images vidéo.<br>
-                L'extraction de schémas s'applique exclusivement aux fichiers vidéo (<code>.mp4</code>, <code>.mkv</code>, <code>.mov</code>, <code>.avi</code>, <code>.webm</code>).
+                L'extraction de schémas s'applique exclusivement aux fichiers vidéo (<code>.mp4</code>, <code>.mkv</code>, <code>.mov</code>, <code>.avi</code>, <code>.webm</code>, <code>.ts</code>).
             </div>
         </div>
         """, unsafe_allow_html=True)

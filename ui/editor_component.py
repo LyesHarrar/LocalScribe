@@ -38,14 +38,18 @@ def get_audio_mime(suffix: str) -> str:
         return "audio/mp3"
     elif ext == ".wav":
         return "audio/wav"
-    elif ext == ".m4a":
+    elif ext in (".m4a", ".aac"):
         return "audio/mp4"
-    elif ext == ".ogg":
+    elif ext in (".ogg", ".opus"):
         return "audio/ogg"
     elif ext == ".flac":
         return "audio/flac"
-    elif ext in (".mp4", ".mkv", ".mov", ".avi"):
+    elif ext in (".mp4", ".mkv", ".mov", ".avi", ".m4v", ".wmv", ".flv"):
         return "video/mp4"
+    elif ext == ".webm":
+        return "video/webm"
+    elif ext in (".ts", ".mts"):
+        return "video/mp2t"
     return "audio/mpeg"
 
 

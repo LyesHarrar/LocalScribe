@@ -135,7 +135,7 @@ flowchart LR
 
 ### 🎛️ Prétraitement Audio Intelligent (Pipeline FFmpeg)
 
-- **Extraction automatique vidéo→audio :** Formats `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm` en WAV 16 kHz mono 16-bit.
+- **Extraction automatique vidéo→audio :** Formats `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.ts`, `.mts` en WAV 16 kHz mono 16-bit.
 - **Auto-Gain dynamique (`dynaudnorm`) :** Égalisation intelligente amplifiant les chuchotements sans saturer les passages forts.
 - **Débruitage spectral (`afftdn`) :** Suppression des bruits continus (climatisation, souffle micro, parasites).
 - **Repli résilient :** Si FFmpeg est absent, l'application bascule automatiquement sans crash ni message d'erreur opaque.
@@ -410,13 +410,13 @@ Toute génération de fichier utilise le pattern `.tmp` → renommage NTFS-rési
 
 | Indicateur | Valeur |
 |:---|:---|
-| **Tests automatisés** | 188 / 188 ✅ |
+| **Tests automatisés** | 190 / 190 ✅ |
 | **Version courante** | v2.6.1 |
 | **Releases majeures** | 2.6 (depuis v1.0) |
 | **Fonctionnalités livrées** | 25+ modules indépendants |
 | **Langues de transcription** | 99 (détection automatique) |
 | **Langues de traduction** | 24 (NLLB-200 offline) |
-| **Formats d'entrée** | .mp4 .mkv .avi .mov .webm .mp3 .wav .m4a .ogg .flac |
+| **Formats d'entrée** | .mp4 .mkv .avi .mov .webm .ts .mts .mp3 .wav .m4a .ogg .flac |
 | **Formats de sortie** | .txt .srt .md .zip (+ images si visual extract) |
 | **Modèles Whisper supportés** | tiny · base · small · medium · large-v1/v2/v3 |
 | **Taille bundle portable** | ~900 Mo (modèle `base` pré-embarqué) |

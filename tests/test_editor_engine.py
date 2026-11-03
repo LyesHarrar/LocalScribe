@@ -17,6 +17,7 @@ from core.editor_engine import (
     delete_segment,
     save_edited_transcription
 )
+from ui.editor_component import get_audio_mime
 
 
 class TestEditorEngine(unittest.TestCase):
@@ -194,6 +195,13 @@ class TestEditorEngine(unittest.TestCase):
         self.assertIn("hist_101_find_input", text_input_keys)
         self.assertIn("hist_102_find_input", text_input_keys)
         self.assertNotIn("find_input", text_input_keys)
+
+    def test_get_audio_mime_supports_ts(self):
+        """Vérifie que les types MIME pour les vidéos .ts et .mts sont correctement configurés."""
+        self.assertEqual(get_audio_mime(".ts"), "video/mp2t")
+        self.assertEqual(get_audio_mime(".mts"), "video/mp2t")
+        self.assertEqual(get_audio_mime(".mp4"), "video/mp4")
+        self.assertEqual(get_audio_mime(".mp3"), "audio/mp3")
 
 
 if __name__ == "__main__":

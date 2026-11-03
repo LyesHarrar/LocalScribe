@@ -620,10 +620,8 @@ def get_folder_progress_summary(
     folder_name = path_obj.name or str(target_folder)
 
     # Extensions audio/vidéo supportées pour le scan du dossier physique
-    supported_exts = {
-        ".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v",
-        ".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"
-    }
+    from core.audio_preprocessor import SUPPORTED_EXTENSIONS
+    supported_exts = SUPPORTED_EXTENSIONS
 
     disk_exists = path_obj.exists() and path_obj.is_dir()
     disk_total = 0
